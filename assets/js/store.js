@@ -1,316 +1,286 @@
 /* ============================================================
-   store.js — طبقة البيانات والتخزين المحلي
-   كل البيانات تُحفظ في متصفح المستخدم (localStorage)
+   store.js — طبقة البيانات (Supabase)
+   ------------------------------------------------------------
+   البيانات تُحفظ في قاعدة سحابية مشتركة، فيراها كل أعضاء المنشأة
+   من أي جهاز. نحتفظ بنسخة في الذاكرة بنفس شكل الواجهة القديمة
+   حتى تبقى كل دوال التجميع والرسم تعمل بشكل متزامن دون تعديل.
    ============================================================ */
 (function (global) {
   'use strict';
 
-  var KEY = 'afnad.marketing.v1';
+  var sb = null;          // عميل Supabase
+  var db = null;          // النسخة في الذاكرة
+  var orgId = null;
+  var me = { id: null, email: '', role: 'member' };
 
-  /* ---------- أدوات مساعدة ---------- */
-  function uid(p) {
-    return (p || 'id') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  }
-
-  function todayISO() {
-    var d = new Date();
-    return iso(d);
-  }
-
+  /* ---------- أدوات ---------- */
+  function todayISO() { return iso(new Date()); }
   function iso(d) {
-    var m = String(d.getMonth() + 1).padStart(2, '0');
-    var day = String(d.getDate()).padStart(2, '0');
-    return d.getFullYear() + '-' + m + '-' + day;
+    return d.getFullYear() + '-' +
+           String(d.getMonth() + 1).padStart(2, '0') + '-' +
+           String(d.getDate()).padStart(2, '0');
   }
-
   function addDays(dateISO, n) {
     var d = new Date(dateISO + 'T00:00:00');
     d.setDate(d.getDate() + n);
     return iso(d);
   }
+  function num(v) {
+    var n = parseFloat(v);
+    return isFinite(n) && n >= 0 ? n : 0;
+  }
 
-  /* ---------- لوحة ألوان القنوات ----------
-     ترتيب ثابت ومُتحقَّق منه (فحوص إمكانية الوصول للألوان، وضع الأزواج المتجاورة):
-     نطاق الإضاءة ✓ · حد التشبع ✓ · فصل عمى الألوان ΔE 14.8 ✓ · الرؤية الطبيعية ΔE 19.9 ✓
-     الألوان تُسنَد بهذا الترتيب ولا تُولَّد عشوائياً. اللون تابع للقناة نفسها
-     ولا يتغيّر عند الفرز أو التصفية. كل صف في الرسم البياني يحمل اسمه نصّاً،
-     فاللون تعزيز للهوية وليس المصدر الوحيد لها.
-  ------------------------------------------- */
   var PALETTE = [
     '#4f46e5', '#f97316', '#db2777', '#ca8a04',
     '#0284c7', '#16a34a', '#7e22ce', '#0d9488'
   ];
 
-  var DEFAULT_CHANNELS = [
-    { id: 'ch_promo',    name: 'الترويج',         color: '#4f46e5', icon: 'send'   },
-    { id: 'ch_infl',     name: 'المؤثرين',        color: '#f97316', icon: 'users'  },
-    { id: 'ch_meta',     name: 'ميتا (انستقرام)', color: '#db2777', icon: 'camera' },
-    { id: 'ch_snap',     name: 'سناب شات',        color: '#ca8a04', icon: 'ghost'  },
-    { id: 'ch_google',   name: 'جوجل',            color: '#0284c7', icon: 'search' },
-    { id: 'ch_wa',       name: 'الواتساب',        color: '#16a34a', icon: 'chat'   },
-    { id: 'ch_tiktok',   name: 'تيك توك',         color: '#7e22ce', icon: 'music'  },
-    { id: 'ch_wab',      name: 'واتساب بزنس',     color: '#0d9488', icon: 'chat'   }
-  ];
-
-  var DEFAULT_ENTITIES = [
-    { id: 'ent_main', name: 'المنشأة الرئيسية' }
-  ];
-
-  /* ---------- تصنيفات الفواتير ---------- */
   var CAT_OUT = ['تسويق', 'بضاعة', 'رواتب', 'إيجار', 'شحن', 'رسوم وعمولات', 'أخرى'];
   var CAT_IN  = ['مبيعات', 'تحويل وارد', 'استرجاع', 'أخرى'];
   var METHODS = ['تحويل بنكي', 'شبكة / مدى', 'نقدي', 'بطاقة ائتمانية', 'محفظة إلكترونية'];
 
   function emptyDB() {
     return {
-      version: 2,
-      user: 'مدير النظام',
-      entities: DEFAULT_ENTITIES.slice(),
-      channels: DEFAULT_CHANNELS.slice(),
-      entries: [],
-      invoices: [],
-      settings: { openingBalance: 0, bankName: '' },
-      log: []
+      user: '', orgName: '', role: 'member',
+      entities: [], channels: [], entries: [], invoices: [],
+      members: [], settings: { openingBalance: 0, bankName: '' }, log: []
     };
   }
 
-  /* ---------- التحميل والحفظ ---------- */
-  var db = null;
+  /* ---------- تحويل صفوف القاعدة إلى شكل الواجهة ---------- */
+  function mapEntry(r) {
+    return {
+      id: r.id, date: r.date, entityId: r.entity_id, channelId: r.channel_id,
+      cost: num(r.cost), orders: num(r.orders), sales: num(r.sales),
+      cogs: num(r.cogs), note: r.note || ''
+    };
+  }
+  function mapInvoice(r) {
+    return {
+      id: r.id, date: r.date, dir: r.dir, amount: num(r.amount),
+      party: r.party || '', invoiceNo: r.invoice_no || '', category: r.category,
+      method: r.method, status: r.status, entityId: r.entity_id, note: r.note || ''
+    };
+  }
 
-  function load() {
-    if (db) return db;
-    try {
-      var raw = global.localStorage.getItem(KEY);
-      db = raw ? JSON.parse(raw) : emptyDB();
-    } catch (e) {
-      db = emptyDB();
+  /* ---------- الاتصال والجلسة ---------- */
+  function client() {
+    if (sb) return sb;
+    if (!global.SUPA_READY) throw new Error('لم تُضبط مفاتيح Supabase في config.js');
+    sb = global.supabase.createClient(global.SUPA_CONFIG.url, global.SUPA_CONFIG.anonKey);
+    return sb;
+  }
+
+  async function currentUser() {
+    var res = await client().auth.getUser();
+    return res.data ? res.data.user : null;
+  }
+
+  async function signUp(email, password) {
+    var r = await client().auth.signUp({ email: email, password: password });
+    if (r.error) return { ok: false, reason: authMsg(r.error) };
+    if (!r.data.session) {
+      return { ok: true, needsConfirm: true };
     }
-    // ضمان وجود كل الحقول بعد الترقية
-    var base = emptyDB();
-    Object.keys(base).forEach(function (k) {
-      if (db[k] === undefined) db[k] = base[k];
+    return { ok: true };
+  }
+
+  async function signIn(email, password) {
+    var r = await client().auth.signInWithPassword({ email: email, password: password });
+    if (r.error) return { ok: false, reason: authMsg(r.error) };
+    return { ok: true };
+  }
+
+  async function signOut() {
+    await client().auth.signOut();
+    db = null; orgId = null;
+  }
+
+  function authMsg(err) {
+    var m = (err && err.message) || '';
+    if (/Invalid login credentials/i.test(m)) return 'البريد أو كلمة المرور غير صحيحة';
+    if (/User already registered/i.test(m))   return 'هذا البريد مسجّل مسبقاً — سجّل الدخول بدلاً من إنشاء حساب';
+    if (/Password should be at least/i.test(m)) return 'كلمة المرور قصيرة — ٦ أحرف على الأقل';
+    if (/Email not confirmed/i.test(m))       return 'لم تؤكد بريدك بعد — افتح رسالة التأكيد في بريدك';
+    if (/rate limit|too many/i.test(m))       return 'محاولات كثيرة — انتظر قليلاً ثم أعد المحاولة';
+    return m || 'تعذّر إتمام العملية';
+  }
+
+  /* ---------- التحميل الكامل ---------- */
+  async function sync() {
+    var c = client();
+    var u = await currentUser();
+    if (!u) throw new Error('غير مسجّل دخول');
+    me.id = u.id;
+    me.email = u.email || '';
+
+    // إيجاد المنظمة، أو تهيئتها عند أول دخول
+    var mem = await c.from('memberships').select('org_id, role').limit(1);
+    if (mem.error) throw new Error(mem.error.message);
+
+    if (!mem.data.length) {
+      var boot = await c.rpc('bootstrap_org', { org_name: 'منشأة أفناد سنا' });
+      if (boot.error) throw new Error('تعذّرت تهيئة المنشأة: ' + boot.error.message);
+      orgId = boot.data;
+      me.role = 'owner';
+    } else {
+      orgId = mem.data[0].org_id;
+      me.role = mem.data[0].role;
+    }
+
+    var out = emptyDB();
+    out.user = me.email;
+    out.role = me.role;
+
+    var q = await Promise.all([
+      c.from('orgs').select('name').eq('id', orgId).single(),
+      c.from('entities').select('*').eq('org_id', orgId).order('name'),
+      c.from('channels').select('*').eq('org_id', orgId).order('created_at'),
+      c.from('entries').select('*').eq('org_id', orgId).order('date', { ascending: false }),
+      c.from('invoices').select('*').eq('org_id', orgId).order('date', { ascending: false }),
+      c.from('settings').select('*').eq('org_id', orgId).maybeSingle(),
+      c.from('audit_log').select('*').eq('org_id', orgId).order('created_at', { ascending: false }).limit(300),
+      c.from('memberships').select('user_id, role').eq('org_id', orgId)
+    ]);
+
+    for (var i = 0; i < q.length; i++) {
+      if (q[i].error) throw new Error(q[i].error.message);
+    }
+
+    out.orgName  = q[0].data ? q[0].data.name : '';
+    out.entities = q[1].data.map(function (r) { return { id: r.id, name: r.name }; });
+    out.channels = q[2].data.map(function (r) {
+      return { id: r.id, name: r.name, color: r.color, icon: r.icon };
     });
+    out.entries  = q[3].data.map(mapEntry);
+    out.invoices = q[4].data.map(mapInvoice);
+    out.settings = q[5].data
+      ? { openingBalance: num(q[5].data.opening_balance), bankName: q[5].data.bank_name || '' }
+      : { openingBalance: 0, bankName: '' };
+    out.log = q[6].data.map(function (r) {
+      return { id: r.id, ts: r.created_at, user: r.user_email || '—',
+               action: r.action, detail: r.detail || '' };
+    });
+    out.members = q[7].data.map(function (r) {
+      return { userId: r.user_id, role: r.role, isMe: r.user_id === me.id };
+    });
+
+    db = out;
     return db;
   }
 
-  function save() {
+  function canWrite() {
+    return ['owner', 'admin', 'member'].indexOf(me.role) >= 0;
+  }
+  function requireWrite() {
+    if (!canWrite()) throw new Error('صلاحيتك للاطلاع فقط — لا يمكنك التعديل');
+  }
+
+  /* ---------- السجل ---------- */
+  async function log(action, detail) {
     try {
-      global.localStorage.setItem(KEY, JSON.stringify(db));
-      return true;
-    } catch (e) {
-      console.error('تعذّر الحفظ:', e);
-      return false;
-    }
+      await client().from('audit_log').insert({
+        org_id: orgId, user_id: me.id, user_email: me.email,
+        action: action, detail: detail
+      });
+    } catch (e) { /* السجل لا يُفشل العملية الأساسية */ }
   }
 
-  /* ---------- سجل التعديلات ---------- */
-  function log(action, detail) {
-    db.log.unshift({
-      id: uid('log'),
-      ts: new Date().toISOString(),
-      user: db.user,
-      action: action,
-      detail: detail
-    });
-    if (db.log.length > 500) db.log.length = 500;
-  }
-
-  /* ---------- الحركات (الإدخالات) ---------- */
-  function normalizeEntry(e) {
-    return {
-      id: e.id || uid('en'),
-      date: e.date,
-      entityId: e.entityId,
-      channelId: e.channelId,
-      cost: num(e.cost),      // الصرف التسويقي
-      orders: num(e.orders),  // عدد الطلبات
-      sales: num(e.sales),    // المبيعات
-      cogs: num(e.cogs),      // تكلفة البضاعة
-      note: (e.note || '').trim()
+  /* ---------- الإدخالات ---------- */
+  async function addEntry(e) {
+    requireWrite();
+    var row = {
+      org_id: orgId, entity_id: e.entityId, channel_id: e.channelId,
+      date: e.date, cost: num(e.cost), orders: Math.round(num(e.orders)),
+      sales: num(e.sales), cogs: num(e.cogs), note: (e.note || '').trim(),
+      created_by: me.id
     };
+    var r = await client().from('entries').insert(row).select().single();
+    if (r.error) throw new Error(r.error.message);
+    db.entries.unshift(mapEntry(r.data));
+    await log('إضافة', 'إدخال ' + row.date + ' — ' + channelName(row.channel_id) +
+              ' — صرف ' + row.cost.toFixed(2) + ' ر.س');
+    return r.data;
   }
 
-  function num(v) {
-    var n = parseFloat(v);
-    return isFinite(n) && n >= 0 ? n : 0;
-  }
-
-  function addEntry(e) {
-    var rec = normalizeEntry(e);
-    db.entries.push(rec);
-    log('إضافة', 'إدخال بتاريخ ' + rec.date + ' — ' + channelName(rec.channelId) +
-        ' — صرف ' + rec.cost.toFixed(2) + ' ر.س');
-    save();
-    return rec;
-  }
-
-  function updateEntry(id, patch) {
+  async function updateEntry(id, patch) {
+    requireWrite();
+    var before = db.entries.find(function (x) { return x.id === id; });
+    var row = {
+      entity_id: patch.entityId, channel_id: patch.channelId, date: patch.date,
+      cost: num(patch.cost), orders: Math.round(num(patch.orders)),
+      sales: num(patch.sales), cogs: num(patch.cogs), note: (patch.note || '').trim()
+    };
+    var r = await client().from('entries').update(row).eq('id', id).select().single();
+    if (r.error) throw new Error(r.error.message);
     var i = db.entries.findIndex(function (x) { return x.id === id; });
-    if (i < 0) return null;
-    var before = db.entries[i];
-    var rec = normalizeEntry(Object.assign({}, before, patch, { id: id }));
-    db.entries[i] = rec;
-    log('تعديل', 'إدخال ' + rec.date + ' — ' + channelName(rec.channelId) +
-        ' — الصرف ' + before.cost.toFixed(2) + ' ← ' + rec.cost.toFixed(2) + ' ر.س');
-    save();
-    return rec;
+    if (i >= 0) db.entries[i] = mapEntry(r.data);
+    await log('تعديل', 'إدخال ' + row.date + ' — الصرف ' +
+              (before ? before.cost.toFixed(2) : '?') + ' ← ' + row.cost.toFixed(2) + ' ر.س');
+    return r.data;
   }
 
-  function deleteEntry(id) {
-    var i = db.entries.findIndex(function (x) { return x.id === id; });
-    if (i < 0) return false;
-    var rec = db.entries[i];
-    db.entries.splice(i, 1);
-    log('حذف', 'إدخال ' + rec.date + ' — ' + channelName(rec.channelId) +
-        ' — صرف ' + rec.cost.toFixed(2) + ' ر.س');
-    save();
+  async function deleteEntry(id) {
+    requireWrite();
+    var rec = db.entries.find(function (x) { return x.id === id; });
+    var r = await client().from('entries').delete().eq('id', id);
+    if (r.error) throw new Error(r.error.message);
+    db.entries = db.entries.filter(function (x) { return x.id !== id; });
+    if (rec) await log('حذف', 'إدخال ' + rec.date + ' — صرف ' + rec.cost.toFixed(2) + ' ر.س');
     return true;
   }
 
-  /* ============================================================
-     الفواتير والحركات المالية (دفتر الحساب البنكي)
-     dir: 'in' وارد | 'out' صادر
-     status: 'paid' مسدّدة (أثّرت على الرصيد) | 'unpaid' معلّقة (لم تؤثر بعد)
-     ============================================================ */
-  function normalizeInvoice(v) {
-    return {
-      id: v.id || uid('inv'),
-      date: v.date,
-      dir: v.dir === 'in' ? 'in' : 'out',
-      amount: num(v.amount),
-      party: (v.party || '').trim(),          // الجهة / المورد / العميل
-      invoiceNo: (v.invoiceNo || '').trim(),  // رقم الفاتورة
-      category: v.category || 'أخرى',
-      method: v.method || 'تحويل بنكي',
+  /* ---------- الفواتير ---------- */
+  async function addInvoice(v) {
+    requireWrite();
+    var row = {
+      org_id: orgId, entity_id: v.entityId, date: v.date,
+      dir: v.dir === 'in' ? 'in' : 'out', amount: num(v.amount),
+      party: (v.party || '').trim(), invoice_no: (v.invoiceNo || '').trim(),
+      category: v.category || 'أخرى', method: v.method || METHODS[0],
       status: v.status === 'unpaid' ? 'unpaid' : 'paid',
-      entityId: v.entityId || (db.entities[0] && db.entities[0].id),
-      note: (v.note || '').trim()
+      note: (v.note || '').trim(), created_by: me.id
     };
+    var r = await client().from('invoices').insert(row).select().single();
+    if (r.error) throw new Error(r.error.message);
+    db.invoices.unshift(mapInvoice(r.data));
+    await log('إضافة', 'فاتورة ' + (row.dir === 'in' ? 'واردة' : 'صادرة') + ' ' + row.date +
+              ' — ' + row.amount.toFixed(2) + ' ر.س' + (row.party ? ' — ' + row.party : ''));
+    return r.data;
   }
 
-  function addInvoice(v) {
-    var rec = normalizeInvoice(v);
-    db.invoices.push(rec);
-    log('إضافة', 'فاتورة ' + (rec.dir === 'in' ? 'واردة' : 'صادرة') + ' بتاريخ ' + rec.date +
-        ' — ' + rec.amount.toFixed(2) + ' ر.س' + (rec.party ? ' — ' + rec.party : ''));
-    save();
-    return rec;
-  }
+  async function updateInvoice(id, patch) {
+    requireWrite();
+    var before = db.invoices.find(function (x) { return x.id === id; });
+    var row = {};
+    if (patch.entityId  !== undefined) row.entity_id  = patch.entityId;
+    if (patch.date      !== undefined) row.date       = patch.date;
+    if (patch.dir       !== undefined) row.dir        = patch.dir;
+    if (patch.amount    !== undefined) row.amount     = num(patch.amount);
+    if (patch.party     !== undefined) row.party      = (patch.party || '').trim();
+    if (patch.invoiceNo !== undefined) row.invoice_no = (patch.invoiceNo || '').trim();
+    if (patch.category  !== undefined) row.category   = patch.category;
+    if (patch.method    !== undefined) row.method     = patch.method;
+    if (patch.status    !== undefined) row.status     = patch.status;
+    if (patch.note      !== undefined) row.note       = (patch.note || '').trim();
 
-  function updateInvoice(id, patch) {
+    var r = await client().from('invoices').update(row).eq('id', id).select().single();
+    if (r.error) throw new Error(r.error.message);
     var i = db.invoices.findIndex(function (x) { return x.id === id; });
-    if (i < 0) return null;
-    var before = db.invoices[i];
-    var rec = normalizeInvoice(Object.assign({}, before, patch, { id: id }));
-    db.invoices[i] = rec;
-    log('تعديل', 'فاتورة ' + rec.date + ' — ' + before.amount.toFixed(2) +
-        ' ← ' + rec.amount.toFixed(2) + ' ر.س');
-    save();
-    return rec;
+    if (i >= 0) db.invoices[i] = mapInvoice(r.data);
+    await log('تعديل', 'فاتورة ' + r.data.date + ' — ' +
+              (before ? before.amount.toFixed(2) : '?') + ' ← ' + num(r.data.amount).toFixed(2) + ' ر.س');
+    return r.data;
   }
 
-  function deleteInvoice(id) {
-    var i = db.invoices.findIndex(function (x) { return x.id === id; });
-    if (i < 0) return false;
-    var rec = db.invoices[i];
-    db.invoices.splice(i, 1);
-    log('حذف', 'فاتورة ' + rec.date + ' — ' + rec.amount.toFixed(2) + ' ر.س');
-    save();
+  async function deleteInvoice(id) {
+    requireWrite();
+    var rec = db.invoices.find(function (x) { return x.id === id; });
+    var r = await client().from('invoices').delete().eq('id', id);
+    if (r.error) throw new Error(r.error.message);
+    db.invoices = db.invoices.filter(function (x) { return x.id !== id; });
+    if (rec) await log('حذف', 'فاتورة ' + rec.date + ' — ' + rec.amount.toFixed(2) + ' ر.س');
     return true;
-  }
-
-  /** استعلام الفواتير ضمن فترة/منشأة/اتجاه/حالة */
-  function queryInvoices(from, to, entityId, dir, status) {
-    return db.invoices.filter(function (v) {
-      if (from && v.date < from) return false;
-      if (to && v.date > to) return false;
-      if (entityId && entityId !== 'all' && v.entityId !== entityId) return false;
-      if (dir && dir !== 'all' && v.dir !== dir) return false;
-      if (status && status !== 'all' && v.status !== status) return false;
-      return true;
-    });
-  }
-
-  /**
-   * ملخص الخزينة.
-   * الرصيد البنكي تراكمي بطبيعته: يُحسب من كل الحركات المسدّدة منذ البداية
-   * وليس من الفترة المختارة فقط. أما حركة الفترة فتُحسب من الفواتير داخلها.
-   */
-  function treasury(from, to, entityId) {
-    var all = queryInvoices(null, null, entityId, 'all', 'all');
-    var t = {
-      opening: num(db.settings.openingBalance),
-      paidIn: 0, paidOut: 0,          // كل الحركات المسدّدة (تراكمي)
-      pendingIn: 0, pendingOut: 0,    // المعلّقة (لم تؤثر على الرصيد)
-      periodIn: 0, periodOut: 0,      // حركة الفترة المختارة (مسدّدة)
-      countPendingIn: 0, countPendingOut: 0
-    };
-
-    all.forEach(function (v) {
-      var inPeriod = (!from || v.date >= from) && (!to || v.date <= to);
-      if (v.status === 'paid') {
-        if (v.dir === 'in') {
-          t.paidIn += v.amount;
-          if (inPeriod) t.periodIn += v.amount;
-        } else {
-          t.paidOut += v.amount;
-          if (inPeriod) t.periodOut += v.amount;
-        }
-      } else {
-        if (v.dir === 'in') { t.pendingIn += v.amount; t.countPendingIn++; }
-        else { t.pendingOut += v.amount; t.countPendingOut++; }
-      }
-    });
-
-    t.balance = t.opening + t.paidIn - t.paidOut;              // الرصيد الحالي
-    t.projected = t.balance + t.pendingIn - t.pendingOut;      // الرصيد المتوقع بعد التحصيل والسداد
-    t.periodNet = t.periodIn - t.periodOut;                    // صافي حركة الفترة
-    return t;
-  }
-
-  /** تجميع الفواتير حسب التصنيف (لرسم المصروفات) */
-  function invoicesByCategory(list) {
-    var map = {};
-    list.forEach(function (v) {
-      if (!map[v.category]) map[v.category] = 0;
-      map[v.category] += v.amount;
-    });
-    return Object.keys(map).map(function (k) {
-      return { category: k, amount: map[k] };
-    }).sort(function (a, b) { return b.amount - a.amount; });
-  }
-
-  function setOpeningBalance(v) {
-    var old = num(db.settings.openingBalance);
-    db.settings.openingBalance = num(v);
-    log('تعديل', 'الرصيد الافتتاحي: ' + old.toFixed(2) + ' ← ' +
-        num(v).toFixed(2) + ' ر.س');
-    save();
-  }
-
-  function setBankName(v) {
-    db.settings.bankName = (v || '').trim();
-    save();
-  }
-
-  function exportInvoicesCSV(list) {
-    var head = ['التاريخ', 'النوع', 'رقم الفاتورة', 'الجهة', 'التصنيف',
-                'المبلغ', 'طريقة الدفع', 'الحالة', 'المنشأة', 'ملاحظات'];
-    var rows = list.map(function (v) {
-      return [
-        v.date, v.dir === 'in' ? 'وارد' : 'صادر', v.invoiceNo || '', v.party || '',
-        v.category, v.amount.toFixed(2), v.method,
-        v.status === 'paid' ? 'مسدّدة' : 'معلّقة',
-        entityName(v.entityId), v.note || ''
-      ];
-    });
-    var esc = function (x) {
-      x = String(x);
-      return /[",\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x;
-    };
-    return '﻿' + [head].concat(rows).map(function (r) {
-      return r.map(esc).join(',');
-    }).join('\r\n');
   }
 
   /* ---------- القنوات ---------- */
@@ -320,32 +290,42 @@
   }
   function channel(id) {
     return db.channels.find(function (x) { return x.id === id; }) ||
-           { id: id, name: '—', color: '#9aa0b5', icon: 'dot' };
+           { id: id, name: '—', color: '#94a3b8', icon: 'dot' };
   }
-  function addChannel(name, color, icon) {
-    var c = { id: uid('ch'), name: name.trim(), color: color || '#4f46e5', icon: icon || 'dot' };
-    db.channels.push(c);
-    log('إضافة', 'قناة جديدة: ' + c.name);
-    save();
-    return c;
+
+  async function addChannel(name, color, icon) {
+    requireWrite();
+    var r = await client().from('channels').insert({
+      org_id: orgId, name: name.trim(), color: color || PALETTE[0], icon: icon || 'dot'
+    }).select().single();
+    if (r.error) throw new Error(r.error.message);
+    db.channels.push({ id: r.data.id, name: r.data.name, color: r.data.color, icon: r.data.icon });
+    await log('إضافة', 'قناة جديدة: ' + r.data.name);
+    return r.data;
   }
-  function updateChannel(id, patch) {
+
+  async function updateChannel(id, patch) {
+    requireWrite();
+    var r = await client().from('channels').update({
+      name: patch.name, color: patch.color, icon: patch.icon
+    }).eq('id', id).select().single();
+    if (r.error) throw new Error(r.error.message);
     var c = db.channels.find(function (x) { return x.id === id; });
-    if (!c) return null;
-    var old = c.name;
-    Object.assign(c, patch);
-    log('تعديل', 'قناة: ' + old + (old !== c.name ? ' ← ' + c.name : ''));
-    save();
-    return c;
+    if (c) { c.name = r.data.name; c.color = r.data.color; c.icon = r.data.icon; }
+    await log('تعديل', 'قناة: ' + r.data.name);
+    return r.data;
   }
-  function deleteChannel(id) {
+
+  async function deleteChannel(id) {
+    requireWrite();
     if (db.entries.some(function (e) { return e.channelId === id; })) {
       return { ok: false, reason: 'لا يمكن حذف قناة مرتبطة بإدخالات. احذف إدخالاتها أولاً.' };
     }
-    var c = channel(id);
+    var nm = channelName(id);
+    var r = await client().from('channels').delete().eq('id', id);
+    if (r.error) return { ok: false, reason: r.error.message };
     db.channels = db.channels.filter(function (x) { return x.id !== id; });
-    log('حذف', 'قناة: ' + c.name);
-    save();
+    await log('حذف', 'قناة: ' + nm);
     return { ok: true };
   }
 
@@ -354,23 +334,31 @@
     var e = db.entities.find(function (x) { return x.id === id; });
     return e ? e.name : '—';
   }
-  function addEntity(name) {
-    var e = { id: uid('ent'), name: name.trim() };
-    db.entities.push(e);
-    log('إضافة', 'منشأة جديدة: ' + e.name);
-    save();
-    return e;
+
+  async function addEntity(name) {
+    requireWrite();
+    var r = await client().from('entities').insert({
+      org_id: orgId, name: name.trim()
+    }).select().single();
+    if (r.error) throw new Error(r.error.message);
+    db.entities.push({ id: r.data.id, name: r.data.name });
+    await log('إضافة', 'منشأة جديدة: ' + r.data.name);
+    return r.data;
   }
-  function updateEntity(id, name) {
+
+  async function updateEntity(id, name) {
+    requireWrite();
+    var r = await client().from('entities').update({ name: name.trim() })
+              .eq('id', id).select().single();
+    if (r.error) throw new Error(r.error.message);
     var e = db.entities.find(function (x) { return x.id === id; });
-    if (!e) return null;
-    var old = e.name;
-    e.name = name.trim();
-    log('تعديل', 'منشأة: ' + old + ' ← ' + e.name);
-    save();
-    return e;
+    if (e) e.name = r.data.name;
+    await log('تعديل', 'منشأة: ' + r.data.name);
+    return r.data;
   }
-  function deleteEntity(id) {
+
+  async function deleteEntity(id) {
+    requireWrite();
     if (db.entries.some(function (e) { return e.entityId === id; })) {
       return { ok: false, reason: 'لا يمكن حذف منشأة مرتبطة بإدخالات. احذف إدخالاتها أولاً.' };
     }
@@ -380,20 +368,37 @@
     if (db.entities.length <= 1) {
       return { ok: false, reason: 'يجب الإبقاء على منشأة واحدة على الأقل.' };
     }
-    var e = db.entities.find(function (x) { return x.id === id; });
+    var nm = entityName(id);
+    var r = await client().from('entities').delete().eq('id', id);
+    if (r.error) return { ok: false, reason: r.error.message };
     db.entities = db.entities.filter(function (x) { return x.id !== id; });
-    log('حذف', 'منشأة: ' + (e ? e.name : id));
-    save();
+    await log('حذف', 'منشأة: ' + nm);
     return { ok: true };
   }
 
-  /* ---------- الاستعلام والتجميع ---------- */
-  /**
-   * يرجّع الإدخالات ضمن فترة ومنشأة محددة.
-   * @param {string} from تاريخ البداية YYYY-MM-DD (شامل)
-   * @param {string} to   تاريخ النهاية YYYY-MM-DD (شامل)
-   * @param {string} entityId معرّف المنشأة أو "all"
-   */
+  /* ---------- الإعدادات ---------- */
+  async function saveSettings(openingBalance, bankName) {
+    requireWrite();
+    var old = db.settings.openingBalance;
+    var r = await client().from('settings').upsert({
+      org_id: orgId, opening_balance: num(openingBalance),
+      bank_name: (bankName || '').trim(), updated_at: new Date().toISOString()
+    }).select().single();
+    if (r.error) throw new Error(r.error.message);
+    db.settings = {
+      openingBalance: num(r.data.opening_balance),
+      bankName: r.data.bank_name || ''
+    };
+    if (num(openingBalance) !== old) {
+      await log('تعديل', 'الرصيد الافتتاحي: ' + old.toFixed(2) + ' ← ' +
+                num(openingBalance).toFixed(2) + ' ر.س');
+    }
+    return db.settings;
+  }
+
+  /* ============================================================
+     الاستعلام والتجميع — تعمل على النسخة في الذاكرة (متزامنة)
+     ============================================================ */
   function query(from, to, entityId) {
     return db.entries.filter(function (e) {
       if (from && e.date < from) return false;
@@ -403,7 +408,6 @@
     });
   }
 
-  /** يجمع قائمة إدخالات في مؤشرات واحدة */
   function totals(list) {
     var t = { cost: 0, orders: 0, sales: 0, cogs: 0 };
     list.forEach(function (e) {
@@ -411,29 +415,25 @@
     });
     t.profit = t.sales - t.cost - t.cogs;
     t.roas = t.cost > 0 ? t.sales / t.cost : 0;
-    t.cpo = t.orders > 0 ? t.cost / t.orders : 0;      // متوسط تكلفة الطلب
-    t.aov = t.orders > 0 ? t.sales / t.orders : 0;     // متوسط قيمة الطلب
-    t.mktRatio = t.sales > 0 ? (t.cost / t.sales) * 100 : 0; // نسبة التسويق
+    t.cpo = t.orders > 0 ? t.cost / t.orders : 0;
+    t.aov = t.orders > 0 ? t.sales / t.orders : 0;
+    t.mktRatio = t.sales > 0 ? (t.cost / t.sales) * 100 : 0;
     return t;
   }
 
-  /** يجمّع حسب القناة ويرجّع مصفوفة مرتبة تنازلياً بالصرف */
   function byChannel(list) {
     var map = {};
     list.forEach(function (e) {
-      if (!map[e.channelId]) map[e.channelId] = { channelId: e.channelId, items: [] };
-      map[e.channelId].items.push(e);
+      if (!map[e.channelId]) map[e.channelId] = [];
+      map[e.channelId].push(e);
     });
     return Object.keys(map).map(function (k) {
-      var g = map[k];
-      var t = totals(g.items);
-      t.channelId = k;
-      t.channel = channel(k);
+      var t = totals(map[k]);
+      t.channelId = k; t.channel = channel(k);
       return t;
     }).sort(function (a, b) { return b.cost - a.cost; });
   }
 
-  /** يجمّع حسب اليوم ضمن الفترة (يملأ الأيام الفارغة بصفر) */
   function byDay(list, from, to) {
     var map = {};
     list.forEach(function (e) {
@@ -450,7 +450,6 @@
     return out;
   }
 
-  /** يجمّع حسب الشهر YYYY-MM */
   function byMonth(list) {
     var map = {};
     list.forEach(function (e) {
@@ -459,13 +458,10 @@
       map[m].push(e);
     });
     return Object.keys(map).sort().map(function (m) {
-      var t = totals(map[m]);
-      t.month = m;
-      return t;
+      var t = totals(map[m]); t.month = m; return t;
     });
   }
 
-  /** يجمّع حسب المنشأة */
   function byEntity(list) {
     var map = {};
     list.forEach(function (e) {
@@ -474,191 +470,163 @@
     });
     return Object.keys(map).map(function (k) {
       var t = totals(map[k]);
-      t.entityId = k;
-      t.entityName = entityName(k);
+      t.entityId = k; t.entityName = entityName(k);
       return t;
     }).sort(function (a, b) { return b.sales - a.sales; });
   }
 
-  /** الفترة السابقة المكافئة بنفس عدد الأيام (للمقارنة) */
   function previousRange(from, to) {
     var d1 = new Date(from + 'T00:00:00'), d2 = new Date(to + 'T00:00:00');
     var days = Math.round((d2 - d1) / 86400000) + 1;
     return { from: addDays(from, -days), to: addDays(from, -1), days: days };
   }
 
-  /* ---------- الاستيراد والتصدير ---------- */
-  function exportJSON() {
-    return JSON.stringify(db, null, 2);
+  /* ---------- الفواتير: استعلام وخزينة ---------- */
+  function queryInvoices(from, to, entityId, dir, status) {
+    return db.invoices.filter(function (v) {
+      if (from && v.date < from) return false;
+      if (to && v.date > to) return false;
+      if (entityId && entityId !== 'all' && v.entityId !== entityId) return false;
+      if (dir && dir !== 'all' && v.dir !== dir) return false;
+      if (status && status !== 'all' && v.status !== status) return false;
+      return true;
+    });
   }
 
-  function importJSON(text) {
-    var parsed;
-    try { parsed = JSON.parse(text); }
-    catch (e) { return { ok: false, reason: 'الملف ليس بصيغة JSON صالحة.' }; }
-    if (!parsed || !Array.isArray(parsed.entries) || !Array.isArray(parsed.channels)) {
-      return { ok: false, reason: 'بنية الملف غير متوافقة مع النظام.' };
-    }
-    db = Object.assign(emptyDB(), parsed);
-    db.entries = db.entries.map(normalizeEntry);
-    // نسخ الإصدار الأول لا تحتوي فواتير ولا إعدادات
-    if (!Array.isArray(db.invoices)) db.invoices = [];
-    db.invoices = db.invoices.map(normalizeInvoice);
-    if (!db.settings) db.settings = { openingBalance: 0, bankName: '' };
-    log('استيراد', 'تم استيراد ' + db.entries.length + ' إدخال و' +
-        db.invoices.length + ' فاتورة من ملف نسخة احتياطية');
-    save();
-    return { ok: true, count: db.entries.length, invoices: db.invoices.length };
+  function treasury(from, to, entityId) {
+    var all = queryInvoices(null, null, entityId, 'all', 'all');
+    var t = {
+      opening: num(db.settings.openingBalance),
+      paidIn: 0, paidOut: 0, pendingIn: 0, pendingOut: 0,
+      periodIn: 0, periodOut: 0, countPendingIn: 0, countPendingOut: 0
+    };
+    all.forEach(function (v) {
+      var inPeriod = (!from || v.date >= from) && (!to || v.date <= to);
+      if (v.status === 'paid') {
+        if (v.dir === 'in') { t.paidIn += v.amount; if (inPeriod) t.periodIn += v.amount; }
+        else                { t.paidOut += v.amount; if (inPeriod) t.periodOut += v.amount; }
+      } else {
+        if (v.dir === 'in') { t.pendingIn += v.amount; t.countPendingIn++; }
+        else                { t.pendingOut += v.amount; t.countPendingOut++; }
+      }
+    });
+    t.balance   = t.opening + t.paidIn - t.paidOut;
+    t.projected = t.balance + t.pendingIn - t.pendingOut;
+    t.periodNet = t.periodIn - t.periodOut;
+    return t;
+  }
+
+  function invoicesByCategory(list) {
+    var map = {};
+    list.forEach(function (v) {
+      if (!map[v.category]) map[v.category] = 0;
+      map[v.category] += v.amount;
+    });
+    return Object.keys(map).map(function (k) {
+      return { category: k, amount: map[k] };
+    }).sort(function (a, b) { return b.amount - a.amount; });
+  }
+
+  /* ---------- التصدير ---------- */
+  function csvEscape(v) {
+    v = String(v);
+    return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
   }
 
   function exportCSV(list) {
-    var head = ['التاريخ', 'المنشأة', 'القناة', 'الصرف التسويقي', 'عدد الطلبات', 'المبيعات', 'تكلفة البضاعة', 'الربح', 'ROAS', 'ملاحظات'];
+    var head = ['التاريخ', 'المنشأة', 'القناة', 'الصرف التسويقي', 'عدد الطلبات',
+                'المبيعات', 'تكلفة البضاعة', 'الربح', 'ROAS', 'ملاحظات'];
     var rows = list.map(function (e) {
-      var profit = e.sales - e.cost - e.cogs;
-      var roas = e.cost > 0 ? (e.sales / e.cost) : 0;
-      return [
-        e.date, entityName(e.entityId), channelName(e.channelId),
-        e.cost.toFixed(2), e.orders, e.sales.toFixed(2), e.cogs.toFixed(2),
-        profit.toFixed(2), roas.toFixed(2), e.note || ''
-      ];
+      return [e.date, entityName(e.entityId), channelName(e.channelId),
+              e.cost.toFixed(2), e.orders, e.sales.toFixed(2), e.cogs.toFixed(2),
+              (e.sales - e.cost - e.cogs).toFixed(2),
+              (e.cost > 0 ? e.sales / e.cost : 0).toFixed(2), e.note || ''];
     });
-    var esc = function (v) {
-      v = String(v);
-      return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
-    };
     return '﻿' + [head].concat(rows).map(function (r) {
-      return r.map(esc).join(',');
+      return r.map(csvEscape).join(',');
     }).join('\r\n');
   }
 
-  function resetAll() {
-    db = emptyDB();
-    save();
+  function exportInvoicesCSV(list) {
+    var head = ['التاريخ', 'النوع', 'رقم الفاتورة', 'الجهة', 'التصنيف',
+                'المبلغ', 'طريقة الدفع', 'الحالة', 'المنشأة', 'ملاحظات'];
+    var rows = list.map(function (v) {
+      return [v.date, v.dir === 'in' ? 'وارد' : 'صادر', v.invoiceNo, v.party,
+              v.category, v.amount.toFixed(2), v.method,
+              v.status === 'paid' ? 'مسدّدة' : 'معلّقة',
+              entityName(v.entityId), v.note];
+    });
+    return '﻿' + [head].concat(rows).map(function (r) {
+      return r.map(csvEscape).join(',');
+    }).join('\r\n');
   }
 
-  /* ---------- بيانات تجريبية ---------- */
-  function seedDemo() {
-    db = emptyDB();
-    db.entities = [
-      { id: 'ent_main',  name: 'منشأة أفناد سنا' },
-      { id: 'ent_two',   name: 'الفرع الثاني' }
-    ];
+  function exportJSON() {
+    return JSON.stringify({
+      exportedAt: new Date().toISOString(), org: db.orgName,
+      entities: db.entities, channels: db.channels,
+      entries: db.entries, invoices: db.invoices, settings: db.settings
+    }, null, 2);
+  }
 
-    var chans = ['ch_promo', 'ch_infl', 'ch_wa', 'ch_wab', 'ch_tiktok', 'ch_snap'];
-    var weight = { ch_promo: 1.0, ch_infl: .55, ch_wa: .30, ch_wab: .10, ch_tiktok: .75, ch_snap: .45 };
-    var end = todayISO();
-    var start = addDays(end, -75);
-    var cur = start;
-
-    while (cur <= end) {
-      db.entities.forEach(function (ent, ei) {
-        chans.forEach(function (cid) {
-          if (Math.random() < .25) return; // بعض الأيام بلا صرف
-          var w = weight[cid] * (ei === 0 ? 1 : .45);
-          var cost = Math.round((180 + Math.random() * 620) * w * 100) / 100;
-          if (cost < 5) return;
-          var roas = 1.6 + Math.random() * 3.4;
-          var sales = Math.round(cost * roas * 100) / 100;
-          var aov = 130 + Math.random() * 190;
-          var orders = Math.max(1, Math.round(sales / aov));
-          var cogs = Math.round(sales * (0.42 + Math.random() * 0.16) * 100) / 100;
-          db.entries.push(normalizeEntry({
-            date: cur, entityId: ent.id, channelId: cid,
-            cost: cost, orders: orders, sales: sales, cogs: cogs, note: ''
-          }));
-        });
-      });
-      cur = addDays(cur, 1);
+  /* ---------- إدارة الفريق ---------- */
+  async function inviteMember(email, role) {
+    if (['owner', 'admin'].indexOf(me.role) < 0) {
+      return { ok: false, reason: 'فقط المالك أو المدير يقدر يدعو أعضاء' };
     }
+    var r = await client().rpc('invite_member', {
+      target_email: (email || '').trim().toLowerCase(),
+      target_role: role || 'member'
+    });
+    if (r.error) return { ok: false, reason: r.error.message };
+    if (r.data && r.data.ok === false) return { ok: false, reason: r.data.reason };
+    await log('إضافة', 'دعوة عضو: ' + email + ' بصلاحية ' + roleName(role));
+    return { ok: true };
+  }
 
-    /* --- فواتير تجريبية --- */
-    db.settings.openingBalance = 150000;
-    db.settings.bankName = 'الحساب البنكي الرئيسي';
-
-    var suppliers = ['مؤسسة الإمداد التجارية', 'شركة الشحن السريع', 'وكالة الإعلان الرقمي',
-                     'مكتب المحاسبة', 'مورد التغليف'];
-    var clients = ['متجر سلة', 'عميل جملة - الرياض', 'عميل جملة - جدة', 'منصة الدفع'];
-    var d2 = start, k = 0;
-
-    while (d2 <= end) {
-      // وارد: تحصيل مبيعات كل بضعة أيام
-      if (k % 4 === 0) {
-        db.invoices.push(normalizeInvoice({
-          date: d2, dir: 'in', amount: Math.round((8000 + Math.random() * 14000) * 100) / 100,
-          party: clients[k % clients.length], invoiceNo: 'IN-' + (1000 + k),
-          category: 'مبيعات', method: 'تحويل بنكي', status: 'paid',
-          entityId: 'ent_main', note: ''
-        }));
-      }
-      // صادر: مصروفات متنوعة
-      if (k % 3 === 0) {
-        var cats = ['بضاعة', 'شحن', 'تسويق', 'رسوم وعمولات'];
-        db.invoices.push(normalizeInvoice({
-          date: d2, dir: 'out', amount: Math.round((2000 + Math.random() * 9000) * 100) / 100,
-          party: suppliers[k % suppliers.length], invoiceNo: 'OUT-' + (2000 + k),
-          category: cats[k % cats.length], method: 'تحويل بنكي', status: 'paid',
-          entityId: 'ent_main', note: ''
-        }));
-      }
-      // رواتب وإيجار شهرياً
-      if (d2.slice(8) === '01') {
-        db.invoices.push(normalizeInvoice({
-          date: d2, dir: 'out', amount: 28000, party: 'رواتب الموظفين',
-          invoiceNo: '', category: 'رواتب', method: 'تحويل بنكي', status: 'paid',
-          entityId: 'ent_main', note: 'راتب شهر ' + d2.slice(0, 7)
-        }));
-        db.invoices.push(normalizeInvoice({
-          date: d2, dir: 'out', amount: 12000, party: 'إيجار المستودع',
-          invoiceNo: '', category: 'إيجار', method: 'تحويل بنكي', status: 'paid',
-          entityId: 'ent_main', note: ''
-        }));
-      }
-      k++; d2 = addDays(d2, 1);
+  async function removeMember(userId) {
+    if (['owner', 'admin'].indexOf(me.role) < 0) {
+      return { ok: false, reason: 'فقط المالك أو المدير يقدر يزيل أعضاء' };
     }
+    if (userId === me.id) return { ok: false, reason: 'لا يمكنك إزالة نفسك' };
+    var r = await client().from('memberships').delete()
+              .eq('org_id', orgId).eq('user_id', userId);
+    if (r.error) return { ok: false, reason: r.error.message };
+    db.members = db.members.filter(function (m) { return m.userId !== userId; });
+    await log('حذف', 'إزالة عضو من الفريق');
+    return { ok: true };
+  }
 
-    // فواتير معلّقة (لم تُسدَّد بعد)
-    db.invoices.push(normalizeInvoice({
-      date: addDays(end, -4), dir: 'out', amount: 18500, party: 'مؤسسة الإمداد التجارية',
-      invoiceNo: 'OUT-9001', category: 'بضاعة', method: 'تحويل بنكي', status: 'unpaid',
-      entityId: 'ent_main', note: 'مستحقة السداد خلال أسبوع'
-    }));
-    db.invoices.push(normalizeInvoice({
-      date: addDays(end, -2), dir: 'in', amount: 26400, party: 'عميل جملة - الدمام',
-      invoiceNo: 'IN-9002', category: 'مبيعات', method: 'تحويل بنكي', status: 'unpaid',
-      entityId: 'ent_main', note: 'بانتظار التحصيل'
-    }));
-
-    log('تهيئة', 'تم توليد بيانات تجريبية (' + db.entries.length + ' إدخال و' +
-        db.invoices.length + ' فاتورة)');
-    save();
-    return db.entries.length;
+  function roleName(r) {
+    return { owner: 'مالك', admin: 'مدير', member: 'عضو', viewer: 'مشاهد فقط' }[r] || r;
   }
 
   /* ---------- الواجهة المصدَّرة ---------- */
   global.Store = {
-    load: load, save: save, get db() { return db; },
-    uid: uid, todayISO: todayISO, iso: iso, addDays: addDays,
-    PALETTE: PALETTE,
+    get db() { return db; },
+    get me() { return me; },
+    get orgId() { return orgId; },
+    canWrite: canWrite, roleName: roleName,
 
-    addEntry: addEntry, updateEntry: updateEntry, deleteEntry: deleteEntry,
-    addChannel: addChannel, updateChannel: updateChannel, deleteChannel: deleteChannel,
-    addEntity: addEntity, updateEntity: updateEntity, deleteEntity: deleteEntity,
-    channel: channel, channelName: channelName, entityName: entityName,
+    client: client, currentUser: currentUser,
+    signUp: signUp, signIn: signIn, signOut: signOut, sync: sync,
 
-    query: query, totals: totals,
-    byChannel: byChannel, byDay: byDay, byMonth: byMonth, byEntity: byEntity,
-    previousRange: previousRange,
-
-    // الفواتير والخزينة
-    addInvoice: addInvoice, updateInvoice: updateInvoice, deleteInvoice: deleteInvoice,
-    queryInvoices: queryInvoices, treasury: treasury, invoicesByCategory: invoicesByCategory,
-    setOpeningBalance: setOpeningBalance, setBankName: setBankName,
-    exportInvoicesCSV: exportInvoicesCSV,
+    todayISO: todayISO, iso: iso, addDays: addDays, PALETTE: PALETTE,
     CAT_IN: CAT_IN, CAT_OUT: CAT_OUT, METHODS: METHODS,
 
-    exportJSON: exportJSON, importJSON: importJSON, exportCSV: exportCSV,
-    resetAll: resetAll, seedDemo: seedDemo,
-    setUser: function (n) { db.user = n; save(); }
+    addEntry: addEntry, updateEntry: updateEntry, deleteEntry: deleteEntry,
+    addInvoice: addInvoice, updateInvoice: updateInvoice, deleteInvoice: deleteInvoice,
+    addChannel: addChannel, updateChannel: updateChannel, deleteChannel: deleteChannel,
+    addEntity: addEntity, updateEntity: updateEntity, deleteEntity: deleteEntity,
+    saveSettings: saveSettings,
+    inviteMember: inviteMember, removeMember: removeMember,
+
+    channel: channel, channelName: channelName, entityName: entityName,
+    query: query, totals: totals, byChannel: byChannel, byDay: byDay,
+    byMonth: byMonth, byEntity: byEntity, previousRange: previousRange,
+    queryInvoices: queryInvoices, treasury: treasury, invoicesByCategory: invoicesByCategory,
+
+    exportCSV: exportCSV, exportInvoicesCSV: exportInvoicesCSV, exportJSON: exportJSON
   };
 
 })(window);

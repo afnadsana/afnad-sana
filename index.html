@@ -9,7 +9,53 @@
 </head>
 <body>
 
-<div class="app">
+<!-- ======================= شاشة تسجيل الدخول ======================= -->
+<div class="auth-screen" id="authScreen" hidden>
+  <div class="auth-card">
+    <div class="auth-brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+      </div>
+      <h1>مسار التسويق وإدارة الإعلانات</h1>
+      <p>سجّل الدخول للوصول إلى بيانات منشأتك</p>
+    </div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-auth-tab="signin">تسجيل الدخول</button>
+      <button class="auth-tab" data-auth-tab="signup">حساب جديد</button>
+    </div>
+
+    <form class="auth-form" id="authForm" autocomplete="on">
+      <div class="field">
+        <label for="authEmail">البريد الإلكتروني</label>
+        <input type="email" id="authEmail" required autocomplete="username"
+               placeholder="name@company.com" dir="ltr">
+      </div>
+      <div class="field">
+        <label for="authPass">كلمة المرور</label>
+        <input type="password" id="authPass" required minlength="6"
+               autocomplete="current-password" placeholder="••••••••" dir="ltr">
+        <span class="hint" id="passHint">٦ أحرف على الأقل</span>
+      </div>
+      <div class="auth-msg" id="authMsg" hidden></div>
+      <button type="submit" class="btn btn-primary auth-submit" id="authSubmit">تسجيل الدخول</button>
+    </form>
+
+    <p class="auth-foot">
+      بياناتك محفوظة في قاعدة بيانات مشتركة ومحميّة — يراها أعضاء منشأتك فقط.
+    </p>
+  </div>
+</div>
+
+<!-- شاشة التحميل -->
+<div class="boot-screen" id="bootScreen">
+  <div class="boot-spin"></div>
+  <p id="bootMsg">جارٍ التحميل…</p>
+</div>
+
+<div class="app" id="appRoot" hidden>
 
   <!-- ======================= الشريط الجانبي ======================= -->
   <aside class="sidebar" id="sidebar">
@@ -49,6 +95,10 @@
       <a class="nav-item" data-view="entities">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg>
         <span>المنشآت</span>
+      </a>
+      <a class="nav-item" data-view="team">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>الفريق والصلاحيات</span>
       </a>
       <a class="nav-item" data-view="log">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
@@ -111,6 +161,8 @@
 
 <div class="toast-host" id="toastHost"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="assets/js/config.js"></script>
 <script src="assets/js/store.js"></script>
 <script src="assets/js/charts.js"></script>
 <script src="assets/js/app.js"></script>
