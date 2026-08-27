@@ -1,0 +1,13 @@
+# أدوات المحرر
+.claude/
+.vscode/
+.idea/
+
+# نظام التشغيل
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ملفات مؤقتة
+*.log
+*.tmp
