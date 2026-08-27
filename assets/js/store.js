@@ -56,13 +56,20 @@
     { id: 'ent_main', name: 'المنشأة الرئيسية' }
   ];
 
+  /* ---------- تصنيفات الفواتير ---------- */
+  var CAT_OUT = ['تسويق', 'بضاعة', 'رواتب', 'إيجار', 'شحن', 'رسوم وعمولات', 'أخرى'];
+  var CAT_IN  = ['مبيعات', 'تحويل وارد', 'استرجاع', 'أخرى'];
+  var METHODS = ['تحويل بنكي', 'شبكة / مدى', 'نقدي', 'بطاقة ائتمانية', 'محفظة إلكترونية'];
+
   function emptyDB() {
     return {
-      version: 1,
+      version: 2,
       user: 'مدير النظام',
       entities: DEFAULT_ENTITIES.slice(),
       channels: DEFAULT_CHANNELS.slice(),
       entries: [],
+      invoices: [],
+      settings: { openingBalance: 0, bankName: '' },
       log: []
     };
   }
@@ -160,6 +167,152 @@
     return true;
   }
 
+  /* ============================================================
+     الفواتير والحركات المالية (دفتر الحساب البنكي)
+     dir: 'in' وارد | 'out' صادر
+     status: 'paid' مسدّدة (أثّرت على الرصيد) | 'unpaid' معلّقة (لم تؤثر بعد)
+     ============================================================ */
+  function normalizeInvoice(v) {
+    return {
+      id: v.id || uid('inv'),
+      date: v.date,
+      dir: v.dir === 'in' ? 'in' : 'out',
+      amount: num(v.amount),
+      party: (v.party || '').trim(),          // الجهة / المورد / العميل
+      invoiceNo: (v.invoiceNo || '').trim(),  // رقم الفاتورة
+      category: v.category || 'أخرى',
+      method: v.method || 'تحويل بنكي',
+      status: v.status === 'unpaid' ? 'unpaid' : 'paid',
+      entityId: v.entityId || (db.entities[0] && db.entities[0].id),
+      note: (v.note || '').trim()
+    };
+  }
+
+  function addInvoice(v) {
+    var rec = normalizeInvoice(v);
+    db.invoices.push(rec);
+    log('إضافة', 'فاتورة ' + (rec.dir === 'in' ? 'واردة' : 'صادرة') + ' بتاريخ ' + rec.date +
+        ' — ' + rec.amount.toFixed(2) + ' ر.س' + (rec.party ? ' — ' + rec.party : ''));
+    save();
+    return rec;
+  }
+
+  function updateInvoice(id, patch) {
+    var i = db.invoices.findIndex(function (x) { return x.id === id; });
+    if (i < 0) return null;
+    var before = db.invoices[i];
+    var rec = normalizeInvoice(Object.assign({}, before, patch, { id: id }));
+    db.invoices[i] = rec;
+    log('تعديل', 'فاتورة ' + rec.date + ' — ' + before.amount.toFixed(2) +
+        ' ← ' + rec.amount.toFixed(2) + ' ر.س');
+    save();
+    return rec;
+  }
+
+  function deleteInvoice(id) {
+    var i = db.invoices.findIndex(function (x) { return x.id === id; });
+    if (i < 0) return false;
+    var rec = db.invoices[i];
+    db.invoices.splice(i, 1);
+    log('حذف', 'فاتورة ' + rec.date + ' — ' + rec.amount.toFixed(2) + ' ر.س');
+    save();
+    return true;
+  }
+
+  /** استعلام الفواتير ضمن فترة/منشأة/اتجاه/حالة */
+  function queryInvoices(from, to, entityId, dir, status) {
+    return db.invoices.filter(function (v) {
+      if (from && v.date < from) return false;
+      if (to && v.date > to) return false;
+      if (entityId && entityId !== 'all' && v.entityId !== entityId) return false;
+      if (dir && dir !== 'all' && v.dir !== dir) return false;
+      if (status && status !== 'all' && v.status !== status) return false;
+      return true;
+    });
+  }
+
+  /**
+   * ملخص الخزينة.
+   * الرصيد البنكي تراكمي بطبيعته: يُحسب من كل الحركات المسدّدة منذ البداية
+   * وليس من الفترة المختارة فقط. أما حركة الفترة فتُحسب من الفواتير داخلها.
+   */
+  function treasury(from, to, entityId) {
+    var all = queryInvoices(null, null, entityId, 'all', 'all');
+    var t = {
+      opening: num(db.settings.openingBalance),
+      paidIn: 0, paidOut: 0,          // كل الحركات المسدّدة (تراكمي)
+      pendingIn: 0, pendingOut: 0,    // المعلّقة (لم تؤثر على الرصيد)
+      periodIn: 0, periodOut: 0,      // حركة الفترة المختارة (مسدّدة)
+      countPendingIn: 0, countPendingOut: 0
+    };
+
+    all.forEach(function (v) {
+      var inPeriod = (!from || v.date >= from) && (!to || v.date <= to);
+      if (v.status === 'paid') {
+        if (v.dir === 'in') {
+          t.paidIn += v.amount;
+          if (inPeriod) t.periodIn += v.amount;
+        } else {
+          t.paidOut += v.amount;
+          if (inPeriod) t.periodOut += v.amount;
+        }
+      } else {
+        if (v.dir === 'in') { t.pendingIn += v.amount; t.countPendingIn++; }
+        else { t.pendingOut += v.amount; t.countPendingOut++; }
+      }
+    });
+
+    t.balance = t.opening + t.paidIn - t.paidOut;              // الرصيد الحالي
+    t.projected = t.balance + t.pendingIn - t.pendingOut;      // الرصيد المتوقع بعد التحصيل والسداد
+    t.periodNet = t.periodIn - t.periodOut;                    // صافي حركة الفترة
+    return t;
+  }
+
+  /** تجميع الفواتير حسب التصنيف (لرسم المصروفات) */
+  function invoicesByCategory(list) {
+    var map = {};
+    list.forEach(function (v) {
+      if (!map[v.category]) map[v.category] = 0;
+      map[v.category] += v.amount;
+    });
+    return Object.keys(map).map(function (k) {
+      return { category: k, amount: map[k] };
+    }).sort(function (a, b) { return b.amount - a.amount; });
+  }
+
+  function setOpeningBalance(v) {
+    var old = num(db.settings.openingBalance);
+    db.settings.openingBalance = num(v);
+    log('تعديل', 'الرصيد الافتتاحي: ' + old.toFixed(2) + ' ← ' +
+        num(v).toFixed(2) + ' ر.س');
+    save();
+  }
+
+  function setBankName(v) {
+    db.settings.bankName = (v || '').trim();
+    save();
+  }
+
+  function exportInvoicesCSV(list) {
+    var head = ['التاريخ', 'النوع', 'رقم الفاتورة', 'الجهة', 'التصنيف',
+                'المبلغ', 'طريقة الدفع', 'الحالة', 'المنشأة', 'ملاحظات'];
+    var rows = list.map(function (v) {
+      return [
+        v.date, v.dir === 'in' ? 'وارد' : 'صادر', v.invoiceNo || '', v.party || '',
+        v.category, v.amount.toFixed(2), v.method,
+        v.status === 'paid' ? 'مسدّدة' : 'معلّقة',
+        entityName(v.entityId), v.note || ''
+      ];
+    });
+    var esc = function (x) {
+      x = String(x);
+      return /[",\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x;
+    };
+    return '﻿' + [head].concat(rows).map(function (r) {
+      return r.map(esc).join(',');
+    }).join('\r\n');
+  }
+
   /* ---------- القنوات ---------- */
   function channelName(id) {
     var c = db.channels.find(function (x) { return x.id === id; });
@@ -220,6 +373,9 @@
   function deleteEntity(id) {
     if (db.entries.some(function (e) { return e.entityId === id; })) {
       return { ok: false, reason: 'لا يمكن حذف منشأة مرتبطة بإدخالات. احذف إدخالاتها أولاً.' };
+    }
+    if (db.invoices.some(function (v) { return v.entityId === id; })) {
+      return { ok: false, reason: 'لا يمكن حذف منشأة مرتبطة بفواتير. احذف فواتيرها أولاً.' };
     }
     if (db.entities.length <= 1) {
       return { ok: false, reason: 'يجب الإبقاء على منشأة واحدة على الأقل.' };
@@ -345,9 +501,14 @@
     }
     db = Object.assign(emptyDB(), parsed);
     db.entries = db.entries.map(normalizeEntry);
-    log('استيراد', 'تم استيراد ' + db.entries.length + ' إدخال من ملف نسخة احتياطية');
+    // نسخ الإصدار الأول لا تحتوي فواتير ولا إعدادات
+    if (!Array.isArray(db.invoices)) db.invoices = [];
+    db.invoices = db.invoices.map(normalizeInvoice);
+    if (!db.settings) db.settings = { openingBalance: 0, bankName: '' };
+    log('استيراد', 'تم استيراد ' + db.entries.length + ' إدخال و' +
+        db.invoices.length + ' فاتورة من ملف نسخة احتياطية');
     save();
-    return { ok: true, count: db.entries.length };
+    return { ok: true, count: db.entries.length, invoices: db.invoices.length };
   }
 
   function exportCSV(list) {
@@ -410,7 +571,65 @@
       cur = addDays(cur, 1);
     }
 
-    log('تهيئة', 'تم توليد بيانات تجريبية (' + db.entries.length + ' إدخال)');
+    /* --- فواتير تجريبية --- */
+    db.settings.openingBalance = 150000;
+    db.settings.bankName = 'الحساب البنكي الرئيسي';
+
+    var suppliers = ['مؤسسة الإمداد التجارية', 'شركة الشحن السريع', 'وكالة الإعلان الرقمي',
+                     'مكتب المحاسبة', 'مورد التغليف'];
+    var clients = ['متجر سلة', 'عميل جملة - الرياض', 'عميل جملة - جدة', 'منصة الدفع'];
+    var d2 = start, k = 0;
+
+    while (d2 <= end) {
+      // وارد: تحصيل مبيعات كل بضعة أيام
+      if (k % 4 === 0) {
+        db.invoices.push(normalizeInvoice({
+          date: d2, dir: 'in', amount: Math.round((8000 + Math.random() * 14000) * 100) / 100,
+          party: clients[k % clients.length], invoiceNo: 'IN-' + (1000 + k),
+          category: 'مبيعات', method: 'تحويل بنكي', status: 'paid',
+          entityId: 'ent_main', note: ''
+        }));
+      }
+      // صادر: مصروفات متنوعة
+      if (k % 3 === 0) {
+        var cats = ['بضاعة', 'شحن', 'تسويق', 'رسوم وعمولات'];
+        db.invoices.push(normalizeInvoice({
+          date: d2, dir: 'out', amount: Math.round((2000 + Math.random() * 9000) * 100) / 100,
+          party: suppliers[k % suppliers.length], invoiceNo: 'OUT-' + (2000 + k),
+          category: cats[k % cats.length], method: 'تحويل بنكي', status: 'paid',
+          entityId: 'ent_main', note: ''
+        }));
+      }
+      // رواتب وإيجار شهرياً
+      if (d2.slice(8) === '01') {
+        db.invoices.push(normalizeInvoice({
+          date: d2, dir: 'out', amount: 28000, party: 'رواتب الموظفين',
+          invoiceNo: '', category: 'رواتب', method: 'تحويل بنكي', status: 'paid',
+          entityId: 'ent_main', note: 'راتب شهر ' + d2.slice(0, 7)
+        }));
+        db.invoices.push(normalizeInvoice({
+          date: d2, dir: 'out', amount: 12000, party: 'إيجار المستودع',
+          invoiceNo: '', category: 'إيجار', method: 'تحويل بنكي', status: 'paid',
+          entityId: 'ent_main', note: ''
+        }));
+      }
+      k++; d2 = addDays(d2, 1);
+    }
+
+    // فواتير معلّقة (لم تُسدَّد بعد)
+    db.invoices.push(normalizeInvoice({
+      date: addDays(end, -4), dir: 'out', amount: 18500, party: 'مؤسسة الإمداد التجارية',
+      invoiceNo: 'OUT-9001', category: 'بضاعة', method: 'تحويل بنكي', status: 'unpaid',
+      entityId: 'ent_main', note: 'مستحقة السداد خلال أسبوع'
+    }));
+    db.invoices.push(normalizeInvoice({
+      date: addDays(end, -2), dir: 'in', amount: 26400, party: 'عميل جملة - الدمام',
+      invoiceNo: 'IN-9002', category: 'مبيعات', method: 'تحويل بنكي', status: 'unpaid',
+      entityId: 'ent_main', note: 'بانتظار التحصيل'
+    }));
+
+    log('تهيئة', 'تم توليد بيانات تجريبية (' + db.entries.length + ' إدخال و' +
+        db.invoices.length + ' فاتورة)');
     save();
     return db.entries.length;
   }
@@ -429,6 +648,13 @@
     query: query, totals: totals,
     byChannel: byChannel, byDay: byDay, byMonth: byMonth, byEntity: byEntity,
     previousRange: previousRange,
+
+    // الفواتير والخزينة
+    addInvoice: addInvoice, updateInvoice: updateInvoice, deleteInvoice: deleteInvoice,
+    queryInvoices: queryInvoices, treasury: treasury, invoicesByCategory: invoicesByCategory,
+    setOpeningBalance: setOpeningBalance, setBankName: setBankName,
+    exportInvoicesCSV: exportInvoicesCSV,
+    CAT_IN: CAT_IN, CAT_OUT: CAT_OUT, METHODS: METHODS,
 
     exportJSON: exportJSON, importJSON: importJSON, exportCSV: exportCSV,
     resetAll: resetAll, seedDemo: seedDemo,

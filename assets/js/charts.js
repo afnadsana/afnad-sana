@@ -15,6 +15,7 @@
     });
   }
   function sar(n, dec) { return money(n, dec) + ' ر.س'; }
+  function sarShort(n) { return compact(n) + ' ر.س'; }
   function int(n) { return Math.round(n || 0).toLocaleString('en-US'); }
   function compact(n) {
     var a = Math.abs(n);
@@ -203,7 +204,7 @@
   }
 
   global.Fmt = {
-    money: money, sar: sar, int: int, compact: compact, pct: pct, roas: roas,
+    money: money, sar: sar, sarShort: sarShort, int: int, compact: compact, pct: pct, roas: roas,
     arDate: arDate, arMonth: arMonth, delta: delta, esc: esc, icon: icon, MONTHS: MONTHS
   };
   global.Charts = { bars: barsHTML, line: lineHTML, empty: emptyHTML };

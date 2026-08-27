@@ -16,7 +16,9 @@
     entityId: 'all',
     preset: 'thisMonth',
     from: null,
-    to: null
+    to: null,
+    invDir: 'all',      // تصفية الفواتير: الكل / وارد / صادر
+    invStatus: 'all'    // تصفية الفواتير: الكل / مسدّدة / معلّقة
   };
 
   /* ---------- حساب الفترة ---------- */
@@ -436,6 +438,272 @@
   }
 
   /* ============================================================
+     الفواتير والحسابات — دفتر الحساب البنكي
+     ============================================================ */
+  function viewInvoices() {
+    var r = computeRange();
+    var T = S.treasury(r.from, r.to, state.entityId);
+
+    var list = S.queryInvoices(r.from, r.to, state.entityId, state.invDir, state.invStatus)
+                .sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
+
+    /* --- الرقم البطل: الرصيد الحالي --- */
+    var hero =
+      '<div class="hero-balance">' +
+        '<div class="hero-main">' +
+          '<div class="hero-label">الرصيد الحالي في الحساب البنكي</div>' +
+          '<div class="hero-num' + (T.balance < 0 ? ' neg' : '') + '">' + F.money(T.balance) + ' ر.س</div>' +
+          '<div class="hero-sub">الرصيد الافتتاحي ' + F.money(T.opening) + ' + الوارد ' +
+            F.money(T.paidIn) + ' − المنصرف ' + F.money(T.paidOut) + '</div>' +
+        '</div>' +
+        '<div class="hero-side">' +
+          '<div class="hs-item"><span class="k">إجمالي ما دخل لي</span>' +
+            '<span class="v in num">+ ' + F.money(T.paidIn) + ' ر.س</span></div>' +
+          '<div class="hs-item"><span class="k">إجمالي ما صرفته</span>' +
+            '<span class="v out num">− ' + F.money(T.paidOut) + ' ر.س</span></div>' +
+          '<div class="hs-item"><span class="k">الرصيد الافتتاحي</span>' +
+            '<span class="v num">' + F.money(T.opening) + ' ر.س</span></div>' +
+        '</div>' +
+      '</div>';
+
+    /* --- المعلّق والمتوقع --- */
+    var pending = (T.countPendingIn + T.countPendingOut) ?
+      '<div class="pending-bar">' +
+        '<div class="pb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+          '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>' +
+        '<div class="pb-txt"><strong>فواتير معلّقة</strong>' +
+          '<span>' + T.countPendingIn + ' بانتظار التحصيل (' + F.money(T.pendingIn) + ' ر.س) · ' +
+          T.countPendingOut + ' بانتظار السداد (' + F.money(T.pendingOut) + ' ر.س)</span></div>' +
+        '<div class="pb-proj"><span class="k">الرصيد المتوقع بعد التسوية</span>' +
+          '<span class="v num' + (T.projected < 0 ? ' neg' : '') + '">' +
+            F.money(T.projected) + ' ر.س</span></div>' +
+      '</div>' : '';
+
+    /* --- حركة الفترة --- */
+    var period =
+      '<div class="grid grid-3 mb">' +
+        kpiCard('وارد الفترة', F.money(T.periodIn) + ' ر.س', 'المحصّل خلال الفترة المختارة',
+                'money', { v: 0, dir: 'flat' }) +
+        kpiCard('منصرف الفترة', F.money(T.periodOut) + ' ر.س', 'المدفوع خلال الفترة المختارة',
+                'cart', { v: 0, dir: 'flat' }) +
+        kpiCard('صافي الفترة', F.money(T.periodNet) + ' ر.س', 'الوارد − المنصرف',
+                'trend', { v: 0, dir: 'flat' }) +
+      '</div>';
+
+    /* --- المصروفات حسب التصنيف --- */
+    var outList = S.queryInvoices(r.from, r.to, state.entityId, 'out', 'paid');
+    var cats = S.invoicesByCategory(outList);
+    var maxCat = cats.length ? cats[0].amount : 1;
+    var catBars = cats.length ? '<div class="bars">' + cats.map(function (c) {
+      return '<div class="bar-row">' +
+          '<div class="bar-top"><span class="bar-label">' + F.esc(c.category) + '</span>' +
+          '<span class="bar-value num">' + F.sarShort(c.amount) + '</span></div>' +
+          '<div class="bar-track"><div class="bar-fill" style="width:' +
+            Math.max((c.amount / maxCat) * 100, 1.5) + '%;background:var(--brand)"></div></div>' +
+        '</div>';
+    }).join('') + '</div>' : C.empty('لا توجد مصروفات في هذه الفترة');
+
+    /* --- مطابقة الصرف التسويقي --- */
+    var mkt = S.totals(S.query(r.from, r.to, state.entityId)).cost;
+    var mktInv = outList.filter(function (v) { return v.category === 'تسويق'; })
+                        .reduce(function (a, v) { return a + v.amount; }, 0);
+    var diff = mkt - mktInv;
+    var recon =
+      '<div class="panel"><div class="panel-head"><h3>مطابقة الصرف التسويقي</h3></div>' +
+      '<div class="panel-body">' +
+        '<div class="recon">' +
+          '<div><span class="k">مسجّل في مسار التسويق</span>' +
+            '<span class="v num">' + F.money(mkt) + ' ر.س</span></div>' +
+          '<div><span class="k">فواتير بتصنيف «تسويق»</span>' +
+            '<span class="v num">' + F.money(mktInv) + ' ر.س</span></div>' +
+          '<div><span class="k">الفرق</span>' +
+            '<span class="v num" style="color:' +
+              (Math.abs(diff) < 1 ? 'var(--green)' : 'var(--amber)') + '">' +
+              F.money(Math.abs(diff)) + ' ر.س</span></div>' +
+        '</div>' +
+        '<p class="hint" style="margin-top:12px">' +
+          (Math.abs(diff) < 1
+            ? 'الأرقام مطابقة — كل الصرف التسويقي مسجّل كفواتير.'
+            : 'الصرف المسجّل في مسار التسويق لا يطابق فواتير التسويق. ' +
+              'الرصيد البنكي يعتمد على الفواتير فقط، فأضف الفرق كفاتورة صادرة إن كان قد خرج فعلاً من الحساب.') +
+        '</p>' +
+      '</div></div>';
+
+    /* --- الجدول --- */
+    var rows = list.map(function (v) {
+      var isIn = v.dir === 'in';
+      return '<tr>' +
+        '<td class="num">' + F.arDate(v.date) + '</td>' +
+        '<td><span class="tag" style="background:' + (isIn ? 'var(--green-bg)' : 'var(--red-bg)') +
+          ';color:' + (isIn ? 'var(--green)' : 'var(--red)') + '">' +
+          (isIn ? '▼ وارد' : '▲ صادر') + '</span></td>' +
+        '<td class="num">' + F.esc(v.invoiceNo || '—') + '</td>' +
+        '<td>' + F.esc(v.party || '—') + '</td>' +
+        '<td>' + F.esc(v.category) + '</td>' +
+        '<td class="num" style="font-weight:800;color:' + (isIn ? 'var(--green)' : 'var(--red)') + '">' +
+          (isIn ? '+ ' : '− ') + F.money(v.amount) + '</td>' +
+        '<td>' + F.esc(v.method) + '</td>' +
+        '<td><span class="tag" style="background:' +
+          (v.status === 'paid' ? 'var(--green-bg)' : '#fff4e0') + ';color:' +
+          (v.status === 'paid' ? 'var(--green)' : '#b06f00') + '">' +
+          (v.status === 'paid' ? 'مسدّدة' : 'معلّقة') + '</span></td>' +
+        '<td>' + F.esc(v.note || '—') + '</td>' +
+        '<td><div class="t-actions">' +
+          (v.status === 'unpaid'
+            ? '<button class="btn btn-sm" data-inv-pay="' + v.id + '">تسديد</button>' : '') +
+          '<button class="btn btn-sm" data-inv-edit="' + v.id + '">تعديل</button>' +
+          '<button class="btn btn-sm btn-danger" data-inv-del="' + v.id + '">حذف</button>' +
+        '</div></td></tr>';
+    }).join('');
+
+    var dirChips = [['all', 'الكل'], ['in', 'وارد'], ['out', 'صادر']].map(function (x) {
+      return '<button class="chip' + (state.invDir === x[0] ? ' active' : '') +
+             '" data-invdir="' + x[0] + '">' + x[1] + '</button>';
+    }).join('');
+    var stChips = [['all', 'كل الحالات'], ['paid', 'مسدّدة'], ['unpaid', 'معلّقة']].map(function (x) {
+      return '<button class="chip' + (state.invStatus === x[0] ? ' active' : '') +
+             '" data-invst="' + x[0] + '">' + x[1] + '</button>';
+    }).join('');
+
+    return '<div class="page-head"><div>' +
+             '<h2>الفواتير والحسابات</h2>' +
+             '<p>كل مبلغ داخل أو خارج — والرصيد المتبقي في حسابك البنكي</p>' +
+           '</div><div style="display:flex;gap:8px;flex-wrap:wrap">' +
+             '<button class="btn" id="openingBtn">الرصيد الافتتاحي</button>' +
+             '<button class="btn" id="expInvCSV">تصدير CSV</button>' +
+             '<button class="btn btn-primary" data-add-inv>' +
+               '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+               '<path d="M12 5v14M5 12h14"/></svg>فاتورة جديدة</button>' +
+           '</div></div>' +
+           hero + pending +
+           filterbarHTML() +
+           period +
+           '<div class="grid grid-2 mb">' +
+             '<div class="panel"><div class="panel-head"><h3>المصروفات حسب التصنيف</h3></div>' +
+               '<div class="panel-body">' + catBars + '</div></div>' +
+             recon +
+           '</div>' +
+           '<div class="panel"><div class="panel-head">' +
+             '<h3>سجل الفواتير (' + list.length + ')</h3>' +
+             '<div style="display:flex;gap:6px;flex-wrap:wrap">' + dirChips + stChips + '</div>' +
+           '</div><div class="table-wrap"><table><thead><tr>' +
+             '<th>التاريخ</th><th>النوع</th><th>رقم الفاتورة</th><th>الجهة</th><th>التصنيف</th>' +
+             '<th>المبلغ</th><th>طريقة الدفع</th><th>الحالة</th><th>ملاحظات</th><th></th>' +
+           '</tr></thead><tbody>' +
+           (list.length ? rows :
+             '<tr><td colspan="10"><div class="empty">' +
+               '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">' +
+               '<path d="M4 2v20l2.5-2 2.5 2 2.5-2 2.5 2 2.5-2 2.5 2V2l-2.5 2L14 2l-2.5 2L9 2 6.5 4z"/></svg>' +
+               '<h4>لا توجد فواتير</h4><p>سجّل أول مبلغ وارد أو صادر.</p>' +
+               '<button class="btn btn-primary" data-add-inv>إضافة فاتورة</button></div></td></tr>') +
+           '</tbody></table></div></div>';
+  }
+
+  /* --- نموذج الفاتورة --- */
+  function invoiceForm(existing) {
+    var v = existing || {
+      date: S.todayISO(), dir: 'out', amount: '', party: '', invoiceNo: '',
+      category: 'أخرى', method: S.METHODS[0], status: 'paid',
+      entityId: state.entityId !== 'all' ? state.entityId : S.db.entities[0].id, note: ''
+    };
+
+    function catOptions(dir, cur) {
+      var arr = dir === 'in' ? S.CAT_IN : S.CAT_OUT;
+      return arr.map(function (c) {
+        return '<option value="' + F.esc(c) + '"' + (c === cur ? ' selected' : '') + '>' +
+               F.esc(c) + '</option>';
+      }).join('');
+    }
+
+    var body =
+      '<div class="form-grid">' +
+        '<div class="field full"><label>نوع الحركة</label>' +
+          '<div class="seg">' +
+            '<label class="seg-opt' + (v.dir === 'out' ? ' on out' : '') + '">' +
+              '<input type="radio" name="invdir" value="out"' +
+                (v.dir === 'out' ? ' checked' : '') + '><span>▲ صادر — مبلغ خرج مني</span></label>' +
+            '<label class="seg-opt' + (v.dir === 'in' ? ' on in' : '') + '">' +
+              '<input type="radio" name="invdir" value="in"' +
+                (v.dir === 'in' ? ' checked' : '') + '><span>▼ وارد — مبلغ دخل لي</span></label>' +
+          '</div></div>' +
+        field('التاريخ', '<input type="date" id="v_date" value="' + v.date + '">') +
+        field('المبلغ (ر.س)',
+          '<input type="number" id="v_amount" min="0" step="0.01" value="' + v.amount + '" placeholder="0.00">') +
+        field('الجهة (المورد / العميل)',
+          '<input id="v_party" value="' + F.esc(v.party) + '" placeholder="مثال: مؤسسة الإمداد">') +
+        field('رقم الفاتورة',
+          '<input id="v_no" value="' + F.esc(v.invoiceNo) + '" placeholder="اختياري">') +
+        '<div class="field"><label>التصنيف</label>' +
+          '<select id="v_cat">' + catOptions(v.dir, v.category) + '</select></div>' +
+        field('طريقة الدفع', sel('v_method', S.METHODS.map(function (m) {
+          return [m, m]; }), v.method)) +
+        field('المنشأة', sel('v_entity', S.db.entities.map(function (x) {
+          return [x.id, x.name]; }), v.entityId)) +
+        '<div class="field"><label>الحالة</label>' +
+          '<select id="v_status">' +
+            '<option value="paid"' + (v.status === 'paid' ? ' selected' : '') + '>مسدّدة — أثّرت على الرصيد</option>' +
+            '<option value="unpaid"' + (v.status === 'unpaid' ? ' selected' : '') + '>معلّقة — لم تؤثر بعد</option>' +
+          '</select></div>' +
+        '<div class="field full"><label>ملاحظات</label>' +
+          '<textarea id="v_note" rows="2" placeholder="اختياري">' + F.esc(v.note) + '</textarea></div>' +
+        '<div class="field full" id="v_preview" style="background:var(--bg);padding:12px;border-radius:10px"></div>' +
+      '</div>';
+
+    openModal(existing ? 'تعديل فاتورة' : 'فاتورة جديدة', body,
+      '<button class="btn btn-primary" id="modalSave">حفظ</button>' +
+      '<button class="btn" data-close>إلغاء</button>',
+      function () {
+        var rec = {
+          date: $('#v_date').value,
+          dir: ($('input[name=invdir]:checked') || {}).value || 'out',
+          amount: $('#v_amount').value,
+          party: $('#v_party').value,
+          invoiceNo: $('#v_no').value,
+          category: $('#v_cat').value,
+          method: $('#v_method').value,
+          entityId: $('#v_entity').value,
+          status: $('#v_status').value,
+          note: $('#v_note').value
+        };
+        if (!rec.date) { toast('التاريخ مطلوب', true); return; }
+        if (!(parseFloat(rec.amount) > 0)) { toast('أدخل مبلغاً أكبر من صفر', true); return; }
+
+        if (existing) { S.updateInvoice(existing.id, rec); toast('تم تحديث الفاتورة'); }
+        else { S.addInvoice(rec); toast('تمت إضافة الفاتورة'); }
+        closeModal(); render();
+      });
+
+    // تحديث التصنيفات والمعاينة عند تغيير النوع
+    function refresh() {
+      var dir = ($('input[name=invdir]:checked') || {}).value || 'out';
+      var cur = $('#v_cat').value;
+      $('#v_cat').innerHTML = catOptions(dir, cur);
+      $$('.seg-opt', $('#modalBody')).forEach(function (l) {
+        var on = l.querySelector('input').checked;
+        l.className = 'seg-opt' + (on ? ' on ' + l.querySelector('input').value : '');
+      });
+
+      var amt = parseFloat($('#v_amount').value) || 0;
+      var st = $('#v_status').value;
+      var cur2 = S.treasury(null, null, 'all').balance;
+      var eff = existing
+        ? cur2 // عند التعديل يصعب عرض الأثر بدقة قبل الحفظ
+        : (st === 'paid' ? cur2 + (dir === 'in' ? amt : -amt) : cur2);
+      $('#v_preview').innerHTML =
+        '<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:12.5px">' +
+          '<span>الرصيد الحالي: <strong class="num">' + F.money(cur2) + ' ر.س</strong></span>' +
+          (existing ? '' :
+            '<span>الرصيد بعد الحفظ: <strong class="num" style="color:' +
+            (eff < 0 ? 'var(--red)' : 'var(--green)') + '">' + F.money(eff) + ' ر.س</strong></span>') +
+          (st === 'unpaid' ? '<span style="color:var(--amber)">فاتورة معلّقة — لن تؤثر على الرصيد حتى تُسدَّد</span>' : '') +
+        '</div>';
+    }
+    $('#modalBody').addEventListener('change', refresh);
+    $('#v_amount').addEventListener('input', refresh);
+    refresh();
+  }
+
+  /* ============================================================
      التقرير الشهري
      ============================================================ */
   function viewMonthly() {
@@ -670,8 +938,9 @@
      الموجّه
      ============================================================ */
   var VIEWS = {
-    dashboard: viewDashboard, entries: viewEntries, monthly: viewMonthly,
-    channels: viewChannels, entities: viewEntities, log: viewLog, settings: viewSettings
+    dashboard: viewDashboard, entries: viewEntries, invoices: viewInvoices,
+    monthly: viewMonthly, channels: viewChannels, entities: viewEntities,
+    log: viewLog, settings: viewSettings
   };
 
   function render() {
@@ -762,6 +1031,64 @@
     // التنقل من بطاقة القناة
     var dr = t.closest('[data-drill]');
     if (dr) { state.view = 'entries'; render(); return; }
+
+    /* ---------- الفواتير ---------- */
+    if (t.closest('[data-add-inv]')) { invoiceForm(null); return; }
+
+    var idc = t.closest('[data-invdir]');
+    if (idc) { state.invDir = idc.dataset.invdir; render(); return; }
+    var isc = t.closest('[data-invst]');
+    if (isc) { state.invStatus = isc.dataset.invst; render(); return; }
+
+    var ive = t.closest('[data-inv-edit]');
+    if (ive) {
+      var iv = S.db.invoices.find(function (x) { return x.id === ive.dataset.invEdit; });
+      if (iv) invoiceForm(iv);
+      return;
+    }
+    var ivp = t.closest('[data-inv-pay]');
+    if (ivp) {
+      S.updateInvoice(ivp.dataset.invPay, { status: 'paid' });
+      toast('تم تسجيل الفاتورة كمسدّدة'); render();
+      return;
+    }
+    var ivd = t.closest('[data-inv-del]');
+    if (ivd) {
+      confirmBox('سيتم حذف هذه الفاتورة نهائياً وسيتغيّر الرصيد. هل أنت متأكد؟', function () {
+        S.deleteInvoice(ivd.dataset.invDel); toast('تم الحذف'); render();
+      });
+      return;
+    }
+    if (t.closest('#openingBtn')) {
+      openModal('الرصيد الافتتاحي',
+        '<div class="form-grid">' +
+          '<div class="field full"><label>اسم الحساب البنكي</label>' +
+            '<input id="o_bank" value="' + F.esc(S.db.settings.bankName || '') +
+            '" placeholder="مثال: الحساب الرئيسي — الراجحي"></div>' +
+          '<div class="field full"><label>الرصيد الافتتاحي (ر.س)</label>' +
+            '<input type="number" id="o_open" step="0.01" value="' +
+            (S.db.settings.openingBalance || 0) + '">' +
+            '<span class="hint">الرصيد الموجود في حسابك قبل تسجيل أي فاتورة في النظام. ' +
+            'كل الحسابات تُبنى عليه.</span></div>' +
+        '</div>',
+        '<button class="btn btn-primary" id="modalSave">حفظ</button>' +
+        '<button class="btn" data-close>إلغاء</button>',
+        function () {
+          S.setBankName($('#o_bank').value);
+          S.setOpeningBalance($('#o_open').value);
+          toast('تم حفظ الرصيد الافتتاحي'); closeModal(); render();
+        });
+      return;
+    }
+    if (t.closest('#expInvCSV')) {
+      var rI = computeRange();
+      var li = S.queryInvoices(rI.from, rI.to, state.entityId, state.invDir, state.invStatus);
+      if (!li.length) { toast('لا توجد فواتير للتصدير', true); return; }
+      download(S.exportInvoicesCSV(li),
+        'الفواتير-' + rI.from + '-الى-' + rI.to + '.csv', 'text/csv;charset=utf-8');
+      toast('تم تنزيل الملف');
+      return;
+    }
 
     // القنوات
     if (t.closest('#addCh')) { channelForm(null); return; }
