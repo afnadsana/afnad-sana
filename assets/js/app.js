@@ -1,5 +1,5 @@
-﻿/* ============================================================
-   app.js â€” ط§ظ„ظ…ظˆط¬ظ‘ظ‡ ظˆط§ظ„ظˆط§ط¬ظ‡ط§طھ
+/* ============================================================
+   app.js — الموجّه والواجهات
    ============================================================ */
 (function () {
   'use strict';
@@ -8,18 +8,18 @@
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
 
-  /* ---------- ط­ط§ظ„ط© ط§ظ„ظˆط§ط¬ظ‡ط© ---------- */
+  /* ---------- حالة الواجهة ---------- */
   var state = {
     view: 'dashboard',
     entityId: 'all',
     preset: 'thisMonth',
     from: null,
     to: null,
-    invDir: 'all',      // طھطµظپظٹط© ط§ظ„ظپظˆط§طھظٹط±: ط§ظ„ظƒظ„ / ظˆط§ط±ط¯ / طµط§ط¯ط±
-    invStatus: 'all'    // طھطµظپظٹط© ط§ظ„ظپظˆط§طھظٹط±: ط§ظ„ظƒظ„ / ظ…ط³ط¯ظ‘ط¯ط© / ظ…ط¹ظ„ظ‘ظ‚ط©
+    invDir: 'all',      // تصفية الفواتير: الكل / وارد / صادر
+    invStatus: 'all'    // تصفية الفواتير: الكل / مسدّدة / معلّقة
   };
 
-  /* ---------- ط­ط³ط§ط¨ ط§ظ„ظپطھط±ط© ---------- */
+  /* ---------- حساب الفترة ---------- */
   function computeRange() {
     var today = S.todayISO();
     var d = new Date(today + 'T00:00:00');
@@ -36,7 +36,7 @@
     }
   }
 
-  /* ---------- ط§ظ„طھظ†ط¨ظٹظ‡ط§طھ ---------- */
+  /* ---------- التنبيهات ---------- */
   function toast(msg, isErr) {
     var el = document.createElement('div');
     el.className = 'toast' + (isErr ? ' err' : '');
@@ -49,7 +49,7 @@
     }, 2600);
   }
 
-  /* ---------- ط§ظ„ظ†ط§ظپط°ط© ط§ظ„ظ…ظ†ط¨ط«ظ‚ط© ---------- */
+  /* ---------- النافذة المنبثقة ---------- */
   var modalOnSave = null;
   function openModal(title, bodyHTML, footHTML, onSave) {
     $('#modalTitle').textContent = title;
@@ -75,21 +75,21 @@
   });
 
   function confirmBox(msg, onYes) {
-    openModal('طھط£ظƒظٹط¯',
+    openModal('تأكيد',
       '<p style="font-size:14px;line-height:1.8">' + F.esc(msg) + '</p>',
-      '<button class="btn btn-danger" id="modalSave">ظ†ط¹ظ…طŒ طھط£ظƒظٹط¯</button>' +
-      '<button class="btn" data-close>ط¥ظ„ط؛ط§ط،</button>',
+      '<button class="btn btn-danger" id="modalSave">نعم، تأكيد</button>' +
+      '<button class="btn" data-close>إلغاء</button>',
       function () { closeModal(); onYes(); });
   }
 
   /* ============================================================
-     ط´ط±ظٹط· ط§ظ„ظپطھط±ط§طھ ط§ظ„ظ…ط´طھط±ظƒ
+     شريط الفترات المشترك
      ============================================================ */
   function filterbarHTML() {
     var r = computeRange();
     var presets = [
-      ['today', 'ط§ظ„ظٹظˆظ…'], ['yesterday', 'ط£ظ…ط³'], ['last7', 'ط¢ط®ط± 7 ط£ظٹط§ظ…'],
-      ['thisMonth', 'ط§ظ„ط´ظ‡ط± ط§ظ„ط­ط§ظ„ظٹ'], ['prevMonth', 'ط§ظ„ط´ظ‡ط± ط§ظ„ط³ط§ط¨ظ‚']
+      ['today', 'اليوم'], ['yesterday', 'أمس'], ['last7', 'آخر 7 أيام'],
+      ['thisMonth', 'الشهر الحالي'], ['prevMonth', 'الشهر السابق']
     ];
     return '<div class="filterbar">' +
       presets.map(function (p) {
@@ -99,15 +99,15 @@
       '<span class="spacer"></span>' +
       '<div class="date-range">' +
         '<input type="date" id="fromDate" value="' + (r.from || '') + '">' +
-        '<span>ط¥ظ„ظ‰</span>' +
+        '<span>إلى</span>' +
         '<input type="date" id="toDate" value="' + (r.to || '') + '">' +
-        '<button class="btn btn-primary btn-sm" id="applyRange">طھط·ط¨ظٹظ‚</button>' +
+        '<button class="btn btn-primary btn-sm" id="applyRange">تطبيق</button>' +
       '</div>' +
     '</div>';
   }
 
   /* ============================================================
-     ظ„ظˆط­ط© ط§ظ„ط¥ط¯ط§ط±ط© ط§ظ„ط±ط¦ظٹط³ظٹط©
+     لوحة الإدارة الرئيسية
      ============================================================ */
   function viewDashboard() {
     var r = computeRange();
@@ -120,14 +120,14 @@
     var prevMap = {};
     chPrev.forEach(function (c) { prevMap[c.channelId] = c; });
 
-    /* --- ط¨ط·ط§ظ‚ط§طھ ط§ظ„ظ‚ظ†ظˆط§طھ (ط£ط¹ظ„ظ‰ 4 طµط±ظپط§ظ‹) --- */
+    /* --- بطاقات القنوات (أعلى 4 صرفاً) --- */
     var cards = chCur.slice(0, 4).map(function (c) {
       var p = prevMap[c.channelId] || { cost: 0, orders: 0, roas: 0, sales: 0, profit: 0 };
       var rows = [
-        ['ط§ظ„طھظƒظ„ظپط©', F.money(c.cost), F.delta(c.cost, p.cost), false],
-        ['ط¹ط¯ط¯ ط§ظ„ط·ظ„ط¨ط§طھ', F.int(c.orders), F.delta(c.orders, p.orders), false],
+        ['التكلفة', F.money(c.cost), F.delta(c.cost, p.cost), false],
+        ['عدد الطلبات', F.int(c.orders), F.delta(c.orders, p.orders), false],
         ['ROAS', F.roas(c.roas), F.delta(c.roas, p.roas), false],
-        ['ط§ظ„ط±ط¨ط­', F.money(c.profit) + ' ط±.ط³', F.delta(c.profit, p.profit), c.profit < 0]
+        ['الربح', F.money(c.profit) + ' ر.س', F.delta(c.profit, p.profit), c.profit < 0]
       ];
       return '<div class="ch-card">' +
         '<div class="ch-top">' +
@@ -135,7 +135,7 @@
             '<span class="ch-badge" style="background:' + c.channel.color + '">' +
               F.icon(c.channel.icon) + '</span>' + F.esc(c.channel.name) +
           '</span>' +
-          '<button class="ch-open" data-drill="' + c.channelId + '" title="ط¹ط±ط¶ طھظپط§طµظٹظ„ ط§ظ„ظ‚ظ†ط§ط©">' +
+          '<button class="ch-open" data-drill="' + c.channelId + '" title="عرض تفاصيل القناة">' +
             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
             '<path d="M15 18l-6-6 6-6"/></svg></button>' +
         '</div>' +
@@ -145,7 +145,7 @@
               '<span class="lbl">' + x[0] + '</span>' +
               '<span style="display:flex;align-items:center;gap:8px">' +
                 '<span class="delta ' + x[2].dir + '">' +
-                  (x[2].dir === 'up' ? 'â–²' : x[2].dir === 'down' ? 'â–¼' : 'â€”') + ' ' + F.pct(x[2].v) +
+                  (x[2].dir === 'up' ? '▲' : x[2].dir === 'down' ? '▼' : '—') + ' ' + F.pct(x[2].v) +
                 '</span>' +
                 '<span class="val' + (x[3] ? ' neg' : '') + ' num">' + x[1] + '</span>' +
               '</span></div>';
@@ -157,20 +157,20 @@
       ? '<div class="grid grid-4 mb">' + cards + '</div>'
       : '';
 
-    /* --- ط¨ط·ط§ظ‚ط§طھ ط§ظ„ظ…ط¤ط´ط±ط§طھ --- */
+    /* --- بطاقات المؤشرات --- */
     var kpis =
       '<div class="grid grid-4 mb">' +
-        kpiCard('ط¹ط¯ط¯ ط§ظ„ط·ظ„ط¨ط§طھ', F.int(T.orders), 'ط¥ط¬ظ…ط§ظ„ظٹ ط§ظ„ط·ظ„ط¨ط§طھ ظپظٹ ط§ظ„ظپطھط±ط©', 'cart',
+        kpiCard('عدد الطلبات', F.int(T.orders), 'إجمالي الطلبات في الفترة', 'cart',
                 F.delta(T.orders, TP.orders)) +
-        kpiCard('ظ…طھظˆط³ط· طھظƒظ„ظپط© ط§ظ„ط·ظ„ط¨', F.money(T.cpo) + ' ط±.ط³', 'ط§ظ„طµط±ظپ أ· ط¹ط¯ط¯ ط§ظ„ط·ظ„ط¨ط§طھ', 'money',
+        kpiCard('متوسط تكلفة الطلب', F.money(T.cpo) + ' ر.س', 'الصرف ÷ عدد الطلبات', 'money',
                 F.delta(T.cpo, TP.cpo), true) +
-        kpiCard('ROAS', F.roas(T.roas), 'ط§ظ„ظ…ط¨ظٹط¹ط§طھ أ· ط§ظ„طµط±ظپ ط§ظ„طھط³ظˆظٹظ‚ظٹ', 'pct',
+        kpiCard('ROAS', F.roas(T.roas), 'المبيعات ÷ الصرف التسويقي', 'pct',
                 F.delta(T.roas, TP.roas)) +
-        kpiCard('ط¥ط¬ظ…ط§ظ„ظٹ ط§ظ„ط±ط¨ط­', F.money(T.profit) + ' ط±.ط³', 'ط§ظ„ظ…ط¨ظٹط¹ط§طھ âˆ’ ط§ظ„طµط±ظپ âˆ’ طھظƒظ„ظپط© ط§ظ„ط¨ط¶ط§ط¹ط©', 'trend',
+        kpiCard('إجمالي الربح', F.money(T.profit) + ' ر.س', 'المبيعات − الصرف − تكلفة البضاعة', 'trend',
                 F.delta(T.profit, TP.profit)) +
       '</div>';
 
-    /* --- ط´ط±ظٹط· ط§ظ„ظ…ظ„ط®طµ --- */
+    /* --- شريط الملخص --- */
     var summary =
       '<div class="summary">' +
         '<div class="summary-right">' +
@@ -179,43 +179,43 @@
             '<path d="M20 12v9H4v-9M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>' +
             '<path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>' +
           '</div>' +
-          '<div><div class="pct-l">ظ†ط³ط¨ط© ط§ظ„طھط³ظˆظٹظ‚</div><div class="pct num">' + F.pct(T.mktRatio) + '</div></div>' +
+          '<div><div class="pct-l">نسبة التسويق</div><div class="pct num">' + F.pct(T.mktRatio) + '</div></div>' +
         '</div>' +
         '<div class="summary-left">' +
-          '<div><div class="k">ط§ظ„طµط±ظپ ط§ظ„طھط³ظˆظٹظ‚ظٹ ط§ظ„ظƒظ„ظٹ</div><div class="v num">' + F.sar(T.cost) + '</div></div>' +
-          '<div><div class="k">ط¥ط¬ظ…ط§ظ„ظٹ ط§ظ„ظ…ط¨ظٹط¹ط§طھ</div><div class="v num">' + F.sar(T.sales) + '</div></div>' +
-          '<div><div class="k">طھظƒظ„ظپط© ط§ظ„ط¨ط¶ط§ط¹ط©</div><div class="v num">' + F.sar(T.cogs) + '</div></div>' +
+          '<div><div class="k">الصرف التسويقي الكلي</div><div class="v num">' + F.sar(T.cost) + '</div></div>' +
+          '<div><div class="k">إجمالي المبيعات</div><div class="v num">' + F.sar(T.sales) + '</div></div>' +
+          '<div><div class="k">تكلفة البضاعة</div><div class="v num">' + F.sar(T.cogs) + '</div></div>' +
         '</div>' +
       '</div>';
 
-    /* --- ط§ظ„ط±ط³ظˆظ… --- */
+    /* --- الرسوم --- */
     var charts =
       '<div class="grid grid-2 mb">' +
         '<div class="panel"><div class="panel-head"><h3>' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
           '<path d="M3 3v18h18"/><path d="M7 16v-5M12 16V8M17 16v-3"/></svg>' +
-          'طµط±ظپ ط§ظ„طھط³ظˆظٹظ‚ ط­ط³ط¨ ط§ظ„ط¬ظ‡ط©</h3></div>' +
+          'صرف التسويق حسب الجهة</h3></div>' +
           '<div class="panel-body">' + C.bars(chCur, { valueKey: 'cost', fmt: F.sar }) + '</div>' +
         '</div>' +
         '<div class="panel"><div class="panel-head"><h3>' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
           '<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>' +
-          'ط§ظ„طµط±ظپ ظˆط§ظ„ظ…ط¨ظٹط¹ط§طھ ط¹ط¨ط± ط§ظ„ظپطھط±ط©</h3></div>' +
+          'الصرف والمبيعات عبر الفترة</h3></div>' +
           '<div class="panel-body">' + C.line(S.byDay(cur, r.from, r.to)) + '</div>' +
         '</div>' +
       '</div>';
 
-    /* --- ط¬ط¯ظˆظ„ طھظپطµظٹظ„ظٹ (ط§ظ„ظ†ط³ط®ط© ط§ظ„ط¬ط¯ظˆظ„ظٹط© ط§ظ„ظ…ط·ظ„ظˆط¨ط© ظ„ظ„ظˆطµظˆظ„) --- */
+    /* --- جدول تفصيلي (النسخة الجدولية المطلوبة للوصول) --- */
     var table =
       '<div class="panel"><div class="panel-head">' +
-        '<h3>طھظپطµظٹظ„ ط§ظ„ط£ط¯ط§ط، ط­ط³ط¨ ط§ظ„ظ‚ظ†ط§ط©</h3>' +
+        '<h3>تفصيل الأداء حسب القناة</h3>' +
         '<button class="btn btn-sm" id="expCSV">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
           '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>' +
-          'طھطµط¯ظٹط± CSV</button>' +
+          'تصدير CSV</button>' +
       '</div><div class="table-wrap"><table><thead><tr>' +
-        '<th>ط§ظ„ظ‚ظ†ط§ط©</th><th>ط§ظ„طµط±ظپ</th><th>ط§ظ„ط·ظ„ط¨ط§طھ</th><th>طھظƒظ„ظپط© ط§ظ„ط·ظ„ط¨</th>' +
-        '<th>ط§ظ„ظ…ط¨ظٹط¹ط§طھ</th><th>ROAS</th><th>ط§ظ„ط±ط¨ط­</th><th>ظ†ط³ط¨ط© ط§ظ„طھط³ظˆظٹظ‚</th>' +
+        '<th>القناة</th><th>الصرف</th><th>الطلبات</th><th>تكلفة الطلب</th>' +
+        '<th>المبيعات</th><th>ROAS</th><th>الربح</th><th>نسبة التسويق</th>' +
       '</tr></thead><tbody>' +
       (chCur.length ? chCur.map(function (c) {
         return '<tr>' +
@@ -230,10 +230,10 @@
             F.money(c.profit) + '</td>' +
           '<td class="num">' + F.pct(c.mktRatio) + '</td>' +
         '</tr>';
-      }).join('') : '<tr><td colspan="8">' + C.empty('ظ„ط§ طھظˆط¬ط¯ ط¨ظٹط§ظ†ط§طھ ظپظٹ ظ‡ط°ظ‡ ط§ظ„ظپطھط±ط©') + '</td></tr>') +
+      }).join('') : '<tr><td colspan="8">' + C.empty('لا توجد بيانات في هذه الفترة') + '</td></tr>') +
       '</tbody>' +
       (chCur.length ? '<tfoot><tr>' +
-        '<td>ط§ظ„ط¥ط¬ظ…ط§ظ„ظٹ</td><td class="num">' + F.money(T.cost) + '</td>' +
+        '<td>الإجمالي</td><td class="num">' + F.money(T.cost) + '</td>' +
         '<td class="num">' + F.int(T.orders) + '</td><td class="num">' + F.money(T.cpo) + '</td>' +
         '<td class="num">' + F.money(T.sales) + '</td><td class="num">' + F.roas(T.roas) + '</td>' +
         '<td class="num">' + F.money(T.profit) + '</td><td class="num">' + F.pct(T.mktRatio) + '</td>' +
@@ -241,13 +241,13 @@
       '</table></div></div>';
 
     return '<div class="page-head"><div>' +
-             '<h2>ظ„ظˆط­ط© ط§ظ„ط¥ط¯ط§ط±ط© ط§ظ„ط±ط¦ظٹط³ظٹط©</h2>' +
-             '<p>ط£ظ‡ظ… ط§ظ„ظ…ط¤ط´ط±ط§طھ ط¯ظˆظ† ط§ظ„ط¯ط®ظˆظ„ ظپظٹ ط§ظ„طھظپط§طµظٹظ„ â€” ظ…ظ‚ط§ط±ظ†ط© ط¨ط§ظ„ظپطھط±ط© ط§ظ„ط³ط§ط¨ظ‚ط© (' +
-               F.arDate(pr.from) + ' â€” ' + F.arDate(pr.to) + ')</p>' +
+             '<h2>لوحة الإدارة الرئيسية</h2>' +
+             '<p>أهم المؤشرات دون الدخول في التفاصيل — مقارنة بالفترة السابقة (' +
+               F.arDate(pr.from) + ' — ' + F.arDate(pr.to) + ')</p>' +
            '</div>' +
            '<button class="btn btn-primary" data-add-entry>' +
              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-             '<path d="M12 5v14M5 12h14"/></svg>ط¥ط¯ط®ط§ظ„ ط¬ط¯ظٹط¯</button>' +
+             '<path d="M12 5v14M5 12h14"/></svg>إدخال جديد</button>' +
            '</div>' +
            filterbarHTML() + cardsBlock + kpis + summary + charts + table;
   }
@@ -267,13 +267,13 @@
       '<div class="kpi-big num">' + big + '</div>' +
       '<div style="display:flex;align-items:center;gap:8px;margin-top:6px">' +
         '<span class="delta ' + good + '">' +
-          (d.dir === 'up' ? 'â–²' : d.dir === 'down' ? 'â–¼' : 'â€”') + ' ' + F.pct(d.v) + '</span>' +
+          (d.dir === 'up' ? '▲' : d.dir === 'down' ? '▼' : '—') + ' ' + F.pct(d.v) + '</span>' +
         '<span class="kpi-sub">' + sub + '</span>' +
       '</div></div>';
   }
 
   /* ============================================================
-     ط§ظ„ط¥ط¯ط®ط§ظ„ط§طھ ط§ظ„ظٹظˆظ…ظٹط©
+     الإدخالات اليومية
      ============================================================ */
   function viewEntries() {
     var r = computeRange();
@@ -297,34 +297,34 @@
         '<td class="num" style="color:' + (profit < 0 ? 'var(--red)' : 'var(--green)') + ';font-weight:700">' +
           F.money(profit) + '</td>' +
         '<td class="num">' + F.roas(ro) + '</td>' +
-        '<td>' + F.esc(e.note || 'â€”') + '</td>' +
+        '<td>' + F.esc(e.note || '—') + '</td>' +
         '<td><div class="t-actions">' +
-          '<button class="btn btn-sm" data-edit="' + e.id + '">طھط¹ط¯ظٹظ„</button>' +
-          '<button class="btn btn-sm btn-danger" data-del="' + e.id + '">ط­ط°ظپ</button>' +
+          '<button class="btn btn-sm" data-edit="' + e.id + '">تعديل</button>' +
+          '<button class="btn btn-sm btn-danger" data-del="' + e.id + '">حذف</button>' +
         '</div></td></tr>';
     }).join('');
 
     return '<div class="page-head"><div>' +
-             '<h2>ط§ظ„ط¥ط¯ط®ط§ظ„ط§طھ ط§ظ„ظٹظˆظ…ظٹط© ظˆط§ظ„ظ…طھط§ط¨ط¹ط©</h2>' +
-             '<p>طھط³ط¬ظٹظ„ ط§ظ„طµط±ظپ ظˆط§ظ„ظ…ط¨ظٹط¹ط§طھ ظٹظˆظ…ط§ظ‹ ط¨ظٹظˆظ… ظ„ظƒظ„ ظ‚ظ†ط§ط© â€” ' + list.length + ' ط¥ط¯ط®ط§ظ„ ظپظٹ ط§ظ„ظپطھط±ط©</p>' +
+             '<h2>الإدخالات اليومية والمتابعة</h2>' +
+             '<p>تسجيل الصرف والمبيعات يوماً بيوم لكل قناة — ' + list.length + ' إدخال في الفترة</p>' +
            '</div><div style="display:flex;gap:8px">' +
-             '<button class="btn" id="expCSV">طھطµط¯ظٹط± CSV</button>' +
+             '<button class="btn" id="expCSV">تصدير CSV</button>' +
              '<button class="btn btn-primary" data-add-entry>' +
                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-               '<path d="M12 5v14M5 12h14"/></svg>ط¥ط¯ط®ط§ظ„ ط¬ط¯ظٹط¯</button>' +
+               '<path d="M12 5v14M5 12h14"/></svg>إدخال جديد</button>' +
            '</div></div>' +
            filterbarHTML() +
            '<div class="panel"><div class="table-wrap"><table><thead><tr>' +
-             '<th>ط§ظ„طھط§ط±ظٹط®</th><th>ط§ظ„ظ…ظ†ط´ط£ط©</th><th>ط§ظ„ظ‚ظ†ط§ط©</th><th>ط§ظ„طµط±ظپ</th><th>ط§ظ„ط·ظ„ط¨ط§طھ</th>' +
-             '<th>ط§ظ„ظ…ط¨ظٹط¹ط§طھ</th><th>طھظƒظ„ظپط© ط§ظ„ط¨ط¶ط§ط¹ط©</th><th>ط§ظ„ط±ط¨ط­</th><th>ROAS</th>' +
-             '<th>ظ…ظ„ط§ط­ط¸ط§طھ</th><th></th>' +
+             '<th>التاريخ</th><th>المنشأة</th><th>القناة</th><th>الصرف</th><th>الطلبات</th>' +
+             '<th>المبيعات</th><th>تكلفة البضاعة</th><th>الربح</th><th>ROAS</th>' +
+             '<th>ملاحظات</th><th></th>' +
            '</tr></thead><tbody>' +
            (list.length ? rows :
-             '<tr><td colspan="11">' + emptyState('ظ„ط§ طھظˆط¬ط¯ ط¥ط¯ط®ط§ظ„ط§طھ',
-               'ط§ط¨ط¯ط£ ط¨طھط³ط¬ظٹظ„ ط£ظˆظ„ ط¹ظ…ظ„ظٹط© طµط±ظپ ظپظٹ ظ‡ط°ظ‡ ط§ظ„ظپطھط±ط©.') + '</td></tr>') +
+             '<tr><td colspan="11">' + emptyState('لا توجد إدخالات',
+               'ابدأ بتسجيل أول عملية صرف في هذه الفترة.') + '</td></tr>') +
            '</tbody>' +
            (list.length ? '<tfoot><tr>' +
-             '<td colspan="3">ط§ظ„ط¥ط¬ظ…ط§ظ„ظٹ</td>' +
+             '<td colspan="3">الإجمالي</td>' +
              '<td class="num">' + F.money(T.cost) + '</td>' +
              '<td class="num">' + F.int(T.orders) + '</td>' +
              '<td class="num">' + F.money(T.sales) + '</td>' +
@@ -340,11 +340,11 @@
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">' +
       '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>' +
       '<h4>' + F.esc(title) + '</h4><p>' + F.esc(msg) + '</p>' +
-      '<button class="btn btn-primary" data-add-entry>ط¥ط¶ط§ظپط© ط¥ط¯ط®ط§ظ„</button></div>';
+      '<button class="btn btn-primary" data-add-entry>إضافة إدخال</button></div>';
   }
 
   /* ============================================================
-     ظ†ظ…ظˆط°ط¬ ط§ظ„ط¥ط¯ط®ط§ظ„
+     نموذج الإدخال
      ============================================================ */
   function entryForm(existing) {
     var e = existing || {
@@ -356,30 +356,30 @@
 
     var body =
       '<div class="form-grid">' +
-        field('ط§ظ„طھط§ط±ظٹط®', '<input type="date" id="f_date" value="' + e.date + '" required>') +
-        field('ط§ظ„ظ…ظ†ط´ط£ط©', sel('f_entity', S.db.entities.map(function (x) {
+        field('التاريخ', '<input type="date" id="f_date" value="' + e.date + '" required>') +
+        field('المنشأة', sel('f_entity', S.db.entities.map(function (x) {
           return [x.id, x.name]; }), e.entityId)) +
-        field('ط§ظ„ظ‚ظ†ط§ط©', sel('f_channel', S.db.channels.map(function (x) {
+        field('القناة', sel('f_channel', S.db.channels.map(function (x) {
           return [x.id, x.name]; }), e.channelId)) +
-        field('ط§ظ„طµط±ظپ ط§ظ„طھط³ظˆظٹظ‚ظٹ (ط±.ط³)',
+        field('الصرف التسويقي (ر.س)',
           '<input type="number" id="f_cost" min="0" step="0.01" value="' + e.cost + '" placeholder="0.00">',
-          'ط§ظ„ظ…ط¨ظ„ط؛ ط§ظ„ظ…طµط±ظˆظپ ط¹ظ„ظ‰ ط§ظ„ط¥ط¹ظ„ط§ظ†') +
-        field('ط¹ط¯ط¯ ط§ظ„ط·ظ„ط¨ط§طھ',
+          'المبلغ المصروف على الإعلان') +
+        field('عدد الطلبات',
           '<input type="number" id="f_orders" min="0" step="1" value="' + e.orders + '" placeholder="0">') +
-        field('ط§ظ„ظ…ط¨ظٹط¹ط§طھ (ط±.ط³)',
+        field('المبيعات (ر.س)',
           '<input type="number" id="f_sales" min="0" step="0.01" value="' + e.sales + '" placeholder="0.00">',
-          'ط¥ط¬ظ…ط§ظ„ظٹ ظ‚ظٹظ…ط© ط§ظ„ط·ظ„ط¨ط§طھ') +
-        field('طھظƒظ„ظپط© ط§ظ„ط¨ط¶ط§ط¹ط© (ط±.ط³)',
+          'إجمالي قيمة الطلبات') +
+        field('تكلفة البضاعة (ر.س)',
           '<input type="number" id="f_cogs" min="0" step="0.01" value="' + e.cogs + '" placeholder="0.00">',
-          'ط§ط®طھظٹط§ط±ظٹ â€” ظٹظڈط³طھط®ط¯ظ… ظ„ط­ط³ط§ط¨ طµط§ظپظٹ ط§ظ„ط±ط¨ط­') +
-        '<div class="field full"><label>ظ…ظ„ط§ط­ط¸ط§طھ</label>' +
-          '<textarea id="f_note" rows="2" placeholder="ط§ط®طھظٹط§ط±ظٹ">' + F.esc(e.note || '') + '</textarea></div>' +
+          'اختياري — يُستخدم لحساب صافي الربح') +
+        '<div class="field full"><label>ملاحظات</label>' +
+          '<textarea id="f_note" rows="2" placeholder="اختياري">' + F.esc(e.note || '') + '</textarea></div>' +
         '<div class="field full" id="f_preview" style="background:var(--bg);padding:12px;border-radius:10px"></div>' +
       '</div>';
 
-    openModal(existing ? 'طھط¹ط¯ظٹظ„ ط¥ط¯ط®ط§ظ„' : 'ط¥ط¯ط®ط§ظ„ ط¬ط¯ظٹط¯', body,
-      '<button class="btn btn-primary" id="modalSave">ط­ظپط¸</button>' +
-      '<button class="btn" data-close>ط¥ظ„ط؛ط§ط،</button>',
+    openModal(existing ? 'تعديل إدخال' : 'إدخال جديد', body,
+      '<button class="btn btn-primary" id="modalSave">حفظ</button>' +
+      '<button class="btn" data-close>إلغاء</button>',
       function () {
         var rec = {
           date: $('#f_date').value,
@@ -391,16 +391,16 @@
           cogs: $('#f_cogs').value,
           note: $('#f_note').value
         };
-        if (!rec.date) { toast('ط§ظ„طھط§ط±ظٹط® ظ…ط·ظ„ظˆط¨', true); return; }
-        if (!rec.cost && !rec.sales) { toast('ط£ط¯ط®ظ„ ط§ظ„طµط±ظپ ط£ظˆ ط§ظ„ظ…ط¨ظٹط¹ط§طھ ط¹ظ„ظ‰ ط§ظ„ط£ظ‚ظ„', true); return; }
+        if (!rec.date) { toast('التاريخ مطلوب', true); return; }
+        if (!rec.cost && !rec.sales) { toast('أدخل الصرف أو المبيعات على الأقل', true); return; }
 
-        if (existing) { S.updateEntry(existing.id, rec); toast('طھظ… طھط­ط¯ظٹط« ط§ظ„ط¥ط¯ط®ط§ظ„'); }
-        else { S.addEntry(rec); toast('طھظ…طھ ط¥ط¶ط§ظپط© ط§ظ„ط¥ط¯ط®ط§ظ„'); }
+        if (existing) { S.updateEntry(existing.id, rec); toast('تم تحديث الإدخال'); }
+        else { S.addEntry(rec); toast('تمت إضافة الإدخال'); }
         closeModal();
         render();
       });
 
-    // ظ…ط¹ط§ظٹظ†ط© ط­ظٹط© ظ„ظ„ظ…ط¤ط´ط±ط§طھ ط§ظ„ظ…ط­ط³ظˆط¨ط©
+    // معاينة حية للمؤشرات المحسوبة
     function preview() {
       var cost = parseFloat($('#f_cost').value) || 0;
       var sales = parseFloat($('#f_sales').value) || 0;
@@ -410,11 +410,11 @@
       $('#f_preview').innerHTML =
         '<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:12.5px">' +
           '<span>ROAS: <strong class="num">' + F.roas(cost > 0 ? sales / cost : 0) + '</strong></span>' +
-          '<span>طھظƒظ„ظپط© ط§ظ„ط·ظ„ط¨: <strong class="num">' +
+          '<span>تكلفة الطلب: <strong class="num">' +
             F.money(orders > 0 ? cost / orders : 0) + ' ط±.ط³</strong></span>' +
-          '<span>ط§ظ„ط±ط¨ط­: <strong class="num" style="color:' +
+          '<span>الربح: <strong class="num" style="color:' +
             (p < 0 ? 'var(--red)' : 'var(--green)') + '">' + F.money(p) + ' ط±.ط³</strong></span>' +
-          '<span>ظ†ط³ط¨ط© ط§ظ„طھط³ظˆظٹظ‚: <strong class="num">' +
+          '<span>نسبة التسويق: <strong class="num">' +
             F.pct(sales > 0 ? (cost / sales) * 100 : 0) + '</strong></span>' +
         '</div>';
     }
@@ -436,7 +436,7 @@
   }
 
   /* ============================================================
-     ط§ظ„ظپظˆط§طھظٹط± ظˆط§ظ„ط­ط³ط§ط¨ط§طھ â€” ط¯ظپطھط± ط§ظ„ط­ط³ط§ط¨ ط§ظ„ط¨ظ†ظƒظٹ
+     الفواتير والحسابات — دفتر الحساب البنكي
      ============================================================ */
   function viewInvoices() {
     var r = computeRange();
@@ -445,50 +445,50 @@
     var list = S.queryInvoices(r.from, r.to, state.entityId, state.invDir, state.invStatus)
                 .sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
 
-    /* --- ط§ظ„ط±ظ‚ظ… ط§ظ„ط¨ط·ظ„: ط§ظ„ط±طµظٹط¯ ط§ظ„ط­ط§ظ„ظٹ --- */
+    /* --- الرقم البطل: الرصيد الحالي --- */
     var hero =
       '<div class="hero-balance">' +
         '<div class="hero-main">' +
-          '<div class="hero-label">ط§ظ„ط±طµظٹط¯ ط§ظ„ط­ط§ظ„ظٹ ظپظٹ ط§ظ„ط­ط³ط§ط¨ ط§ظ„ط¨ظ†ظƒظٹ</div>' +
+          '<div class="hero-label">الرصيد الحالي في الحساب البنكي</div>' +
           '<div class="hero-num' + (T.balance < 0 ? ' neg' : '') + '">' + F.money(T.balance) + ' ط±.ط³</div>' +
-          '<div class="hero-sub">ط§ظ„ط±طµظٹط¯ ط§ظ„ط§ظپطھطھط§ط­ظٹ ' + F.money(T.opening) + ' + ط§ظ„ظˆط§ط±ط¯ ' +
-            F.money(T.paidIn) + ' âˆ’ ط§ظ„ظ…ظ†طµط±ظپ ' + F.money(T.paidOut) + '</div>' +
+          '<div class="hero-sub">الرصيد الافتتاحي ' + F.money(T.opening) + ' + الوارد ' +
+            F.money(T.paidIn) + ' − المنصرف ' + F.money(T.paidOut) + '</div>' +
         '</div>' +
         '<div class="hero-side">' +
-          '<div class="hs-item"><span class="k">ط¥ط¬ظ…ط§ظ„ظٹ ظ…ط§ ط¯ط®ظ„ ظ„ظٹ</span>' +
+          '<div class="hs-item"><span class="k">إجمالي ما دخل لي</span>' +
             '<span class="v in num">+ ' + F.money(T.paidIn) + ' ط±.ط³</span></div>' +
-          '<div class="hs-item"><span class="k">ط¥ط¬ظ…ط§ظ„ظٹ ظ…ط§ طµط±ظپطھظ‡</span>' +
+          '<div class="hs-item"><span class="k">إجمالي ما صرفته</span>' +
             '<span class="v out num">âˆ’ ' + F.money(T.paidOut) + ' ط±.ط³</span></div>' +
-          '<div class="hs-item"><span class="k">ط§ظ„ط±طµظٹط¯ ط§ظ„ط§ظپطھطھط§ط­ظٹ</span>' +
+          '<div class="hs-item"><span class="k">الرصيد الافتتاحي</span>' +
             '<span class="v num">' + F.money(T.opening) + ' ط±.ط³</span></div>' +
         '</div>' +
       '</div>';
 
-    /* --- ط§ظ„ظ…ط¹ظ„ظ‘ظ‚ ظˆط§ظ„ظ…طھظˆظ‚ط¹ --- */
+    /* --- المعلّق والمتوقع --- */
     var pending = (T.countPendingIn + T.countPendingOut) ?
       '<div class="pending-bar">' +
         '<div class="pb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
           '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>' +
-        '<div class="pb-txt"><strong>ظپظˆط§طھظٹط± ظ…ط¹ظ„ظ‘ظ‚ط©</strong>' +
-          '<span>' + T.countPendingIn + ' ط¨ط§ظ†طھط¸ط§ط± ط§ظ„طھط­طµظٹظ„ (' + F.money(T.pendingIn) + ' ط±.ط³) آ· ' +
-          T.countPendingOut + ' ط¨ط§ظ†طھط¸ط§ط± ط§ظ„ط³ط¯ط§ط¯ (' + F.money(T.pendingOut) + ' ط±.ط³)</span></div>' +
-        '<div class="pb-proj"><span class="k">ط§ظ„ط±طµظٹط¯ ط§ظ„ظ…طھظˆظ‚ط¹ ط¨ط¹ط¯ ط§ظ„طھط³ظˆظٹط©</span>' +
+        '<div class="pb-txt"><strong>فواتير معلّقة</strong>' +
+          '<span>' + T.countPendingIn + ' بانتظار التحصيل (' + F.money(T.pendingIn) + ' ر.س) · ' +
+          T.countPendingOut + ' بانتظار السداد (' + F.money(T.pendingOut) + ' ر.س)</span></div>' +
+        '<div class="pb-proj"><span class="k">الرصيد المتوقع بعد التسوية</span>' +
           '<span class="v num' + (T.projected < 0 ? ' neg' : '') + '">' +
             F.money(T.projected) + ' ط±.ط³</span></div>' +
       '</div>' : '';
 
-    /* --- ط­ط±ظƒط© ط§ظ„ظپطھط±ط© --- */
+    /* --- حركة الفترة --- */
     var period =
       '<div class="grid grid-3 mb">' +
-        kpiCard('ظˆط§ط±ط¯ ط§ظ„ظپطھط±ط©', F.money(T.periodIn) + ' ط±.ط³', 'ط§ظ„ظ…ط­طµظ‘ظ„ ط®ظ„ط§ظ„ ط§ظ„ظپطھط±ط© ط§ظ„ظ…ط®طھط§ط±ط©',
+        kpiCard('وارد الفترة', F.money(T.periodIn) + ' ر.س', 'المحصّل خلال الفترة المختارة',
                 'money', { v: 0, dir: 'flat' }) +
-        kpiCard('ظ…ظ†طµط±ظپ ط§ظ„ظپطھط±ط©', F.money(T.periodOut) + ' ط±.ط³', 'ط§ظ„ظ…ط¯ظپظˆط¹ ط®ظ„ط§ظ„ ط§ظ„ظپطھط±ط© ط§ظ„ظ…ط®طھط§ط±ط©',
+        kpiCard('منصرف الفترة', F.money(T.periodOut) + ' ر.س', 'المدفوع خلال الفترة المختارة',
                 'cart', { v: 0, dir: 'flat' }) +
-        kpiCard('طµط§ظپظٹ ط§ظ„ظپطھط±ط©', F.money(T.periodNet) + ' ط±.ط³', 'ط§ظ„ظˆط§ط±ط¯ âˆ’ ط§ظ„ظ…ظ†طµط±ظپ',
+        kpiCard('صافي الفترة', F.money(T.periodNet) + ' ر.س', 'الوارد − المنصرف',
                 'trend', { v: 0, dir: 'flat' }) +
       '</div>';
 
-    /* --- ط§ظ„ظ…طµط±ظˆظپط§طھ ط­ط³ط¨ ط§ظ„طھطµظ†ظٹظپ --- */
+    /* --- المصروفات حسب التصنيف --- */
     var outList = S.queryInvoices(r.from, r.to, state.entityId, 'out', 'paid');
     var cats = S.invoicesByCategory(outList);
     var maxCat = cats.length ? cats[0].amount : 1;
@@ -499,44 +499,44 @@
           '<div class="bar-track"><div class="bar-fill" style="width:' +
             Math.max((c.amount / maxCat) * 100, 1.5) + '%;background:var(--brand)"></div></div>' +
         '</div>';
-    }).join('') + '</div>' : C.empty('ظ„ط§ طھظˆط¬ط¯ ظ…طµط±ظˆظپط§طھ ظپظٹ ظ‡ط°ظ‡ ط§ظ„ظپطھط±ط©');
+    }).join('') + '</div>' : C.empty('لا توجد مصروفات في هذه الفترة');
 
-    /* --- ظ…ط·ط§ط¨ظ‚ط© ط§ظ„طµط±ظپ ط§ظ„طھط³ظˆظٹظ‚ظٹ --- */
+    /* --- مطابقة الصرف التسويقي --- */
     var mkt = S.totals(S.query(r.from, r.to, state.entityId)).cost;
-    var mktInv = outList.filter(function (v) { return v.category === 'طھط³ظˆظٹظ‚'; })
+    var mktInv = outList.filter(function (v) { return v.category === 'تسويق'; })
                         .reduce(function (a, v) { return a + v.amount; }, 0);
     var diff = mkt - mktInv;
     var recon =
-      '<div class="panel"><div class="panel-head"><h3>ظ…ط·ط§ط¨ظ‚ط© ط§ظ„طµط±ظپ ط§ظ„طھط³ظˆظٹظ‚ظٹ</h3></div>' +
+      '<div class="panel"><div class="panel-head"><h3>مطابقة الصرف التسويقي</h3></div>' +
       '<div class="panel-body">' +
         '<div class="recon">' +
-          '<div><span class="k">ظ…ط³ط¬ظ‘ظ„ ظپظٹ ظ…ط³ط§ط± ط§ظ„طھط³ظˆظٹظ‚</span>' +
+          '<div><span class="k">مسجّل في مسار التسويق</span>' +
             '<span class="v num">' + F.money(mkt) + ' ط±.ط³</span></div>' +
-          '<div><span class="k">ظپظˆط§طھظٹط± ط¨طھطµظ†ظٹظپ آ«طھط³ظˆظٹظ‚آ»</span>' +
+          '<div><span class="k">فواتير بتصنيف «تسويق»</span>' +
             '<span class="v num">' + F.money(mktInv) + ' ط±.ط³</span></div>' +
-          '<div><span class="k">ط§ظ„ظپط±ظ‚</span>' +
+          '<div><span class="k">الفرق</span>' +
             '<span class="v num" style="color:' +
               (Math.abs(diff) < 1 ? 'var(--green)' : 'var(--amber)') + '">' +
               F.money(Math.abs(diff)) + ' ط±.ط³</span></div>' +
         '</div>' +
         '<p class="hint" style="margin-top:12px">' +
           (Math.abs(diff) < 1
-            ? 'ط§ظ„ط£ط±ظ‚ط§ظ… ظ…ط·ط§ط¨ظ‚ط© â€” ظƒظ„ ط§ظ„طµط±ظپ ط§ظ„طھط³ظˆظٹظ‚ظٹ ظ…ط³ط¬ظ‘ظ„ ظƒظپظˆط§طھظٹط±.'
-            : 'ط§ظ„طµط±ظپ ط§ظ„ظ…ط³ط¬ظ‘ظ„ ظپظٹ ظ…ط³ط§ط± ط§ظ„طھط³ظˆظٹظ‚ ظ„ط§ ظٹط·ط§ط¨ظ‚ ظپظˆط§طھظٹط± ط§ظ„طھط³ظˆظٹظ‚. ' +
-              'ط§ظ„ط±طµظٹط¯ ط§ظ„ط¨ظ†ظƒظٹ ظٹط¹طھظ…ط¯ ط¹ظ„ظ‰ ط§ظ„ظپظˆط§طھظٹط± ظپظ‚ط·طŒ ظپط£ط¶ظپ ط§ظ„ظپط±ظ‚ ظƒظپط§طھظˆط±ط© طµط§ط¯ط±ط© ط¥ظ† ظƒط§ظ† ظ‚ط¯ ط®ط±ط¬ ظپط¹ظ„ط§ظ‹ ظ…ظ† ط§ظ„ط­ط³ط§ط¨.') +
+            ? 'الأرقام مطابقة — كل الصرف التسويقي مسجّل كفواتير.'
+            : 'الصرف المسجّل في مسار التسويق لا يطابق فواتير التسويق. ' +
+              'الرصيد البنكي يعتمد على الفواتير فقط، فأضف الفرق كفاتورة صادرة إن كان قد خرج فعلاً من الحساب.') +
         '</p>' +
       '</div></div>';
 
-    /* --- ط§ظ„ط¬ط¯ظˆظ„ --- */
+    /* --- الجدول --- */
     var rows = list.map(function (v) {
       var isIn = v.dir === 'in';
       return '<tr>' +
         '<td class="num">' + F.arDate(v.date) + '</td>' +
         '<td><span class="tag" style="background:' + (isIn ? 'var(--green-bg)' : 'var(--red-bg)') +
           ';color:' + (isIn ? 'var(--green)' : 'var(--red)') + '">' +
-          (isIn ? 'â–¼ ظˆط§ط±ط¯' : 'â–² طµط§ط¯ط±') + '</span></td>' +
-        '<td class="num">' + F.esc(v.invoiceNo || 'â€”') + '</td>' +
-        '<td>' + F.esc(v.party || 'â€”') + '</td>' +
+          (isIn ? '▼ وارد' : '▲ صادر') + '</span></td>' +
+        '<td class="num">' + F.esc(v.invoiceNo || '—') + '</td>' +
+        '<td>' + F.esc(v.party || '—') + '</td>' +
         '<td>' + F.esc(v.category) + '</td>' +
         '<td class="num" style="font-weight:800;color:' + (isIn ? 'var(--green)' : 'var(--red)') + '">' +
           (isIn ? '+ ' : 'âˆ’ ') + F.money(v.amount) + '</td>' +
@@ -544,64 +544,64 @@
         '<td><span class="tag" style="background:' +
           (v.status === 'paid' ? 'var(--green-bg)' : '#fff4e0') + ';color:' +
           (v.status === 'paid' ? 'var(--green)' : '#b06f00') + '">' +
-          (v.status === 'paid' ? 'ظ…ط³ط¯ظ‘ط¯ط©' : 'ظ…ط¹ظ„ظ‘ظ‚ط©') + '</span></td>' +
-        '<td>' + F.esc(v.note || 'â€”') + '</td>' +
+          (v.status === 'paid' ? 'مسدّدة' : 'معلّقة') + '</span></td>' +
+        '<td>' + F.esc(v.note || '—') + '</td>' +
         '<td><div class="t-actions">' +
           (v.status === 'unpaid'
-            ? '<button class="btn btn-sm" data-inv-pay="' + v.id + '">طھط³ط¯ظٹط¯</button>' : '') +
-          '<button class="btn btn-sm" data-inv-edit="' + v.id + '">طھط¹ط¯ظٹظ„</button>' +
-          '<button class="btn btn-sm btn-danger" data-inv-del="' + v.id + '">ط­ط°ظپ</button>' +
+            ? '<button class="btn btn-sm" data-inv-pay="' + v.id + '">تسديد</button>' : '') +
+          '<button class="btn btn-sm" data-inv-edit="' + v.id + '">تعديل</button>' +
+          '<button class="btn btn-sm btn-danger" data-inv-del="' + v.id + '">حذف</button>' +
         '</div></td></tr>';
     }).join('');
 
-    var dirChips = [['all', 'ط§ظ„ظƒظ„'], ['in', 'ظˆط§ط±ط¯'], ['out', 'طµط§ط¯ط±']].map(function (x) {
+    var dirChips = [['all', 'الكل'], ['in', 'وارد'], ['out', 'صادر']].map(function (x) {
       return '<button class="chip' + (state.invDir === x[0] ? ' active' : '') +
              '" data-invdir="' + x[0] + '">' + x[1] + '</button>';
     }).join('');
-    var stChips = [['all', 'ظƒظ„ ط§ظ„ط­ط§ظ„ط§طھ'], ['paid', 'ظ…ط³ط¯ظ‘ط¯ط©'], ['unpaid', 'ظ…ط¹ظ„ظ‘ظ‚ط©']].map(function (x) {
+    var stChips = [['all', 'كل الحالات'], ['paid', 'مسدّدة'], ['unpaid', 'معلّقة']].map(function (x) {
       return '<button class="chip' + (state.invStatus === x[0] ? ' active' : '') +
              '" data-invst="' + x[0] + '">' + x[1] + '</button>';
     }).join('');
 
     return '<div class="page-head"><div>' +
-             '<h2>ط§ظ„ظپظˆط§طھظٹط± ظˆط§ظ„ط­ط³ط§ط¨ط§طھ</h2>' +
-             '<p>ظƒظ„ ظ…ط¨ظ„ط؛ ط¯ط§ط®ظ„ ط£ظˆ ط®ط§ط±ط¬ â€” ظˆط§ظ„ط±طµظٹط¯ ط§ظ„ظ…طھط¨ظ‚ظٹ ظپظٹ ط­ط³ط§ط¨ظƒ ط§ظ„ط¨ظ†ظƒظٹ</p>' +
+             '<h2>الفواتير والحسابات</h2>' +
+             '<p>كل مبلغ داخل أو خارج — والرصيد المتبقي في حسابك البنكي</p>' +
            '</div><div style="display:flex;gap:8px;flex-wrap:wrap">' +
-             '<button class="btn" id="openingBtn">ط§ظ„ط±طµظٹط¯ ط§ظ„ط§ظپطھطھط§ط­ظٹ</button>' +
-             '<button class="btn" id="expInvCSV">طھطµط¯ظٹط± CSV</button>' +
+             '<button class="btn" id="openingBtn">الرصيد الافتتاحي</button>' +
+             '<button class="btn" id="expInvCSV">تصدير CSV</button>' +
              '<button class="btn btn-primary" data-add-inv>' +
                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-               '<path d="M12 5v14M5 12h14"/></svg>ظپط§طھظˆط±ط© ط¬ط¯ظٹط¯ط©</button>' +
+               '<path d="M12 5v14M5 12h14"/></svg>فاتورة جديدة</button>' +
            '</div></div>' +
            hero + pending +
            filterbarHTML() +
            period +
            '<div class="grid grid-2 mb">' +
-             '<div class="panel"><div class="panel-head"><h3>ط§ظ„ظ…طµط±ظˆظپط§طھ ط­ط³ط¨ ط§ظ„طھطµظ†ظٹظپ</h3></div>' +
+             '<div class="panel"><div class="panel-head"><h3>المصروفات حسب التصنيف</h3></div>' +
                '<div class="panel-body">' + catBars + '</div></div>' +
              recon +
            '</div>' +
            '<div class="panel"><div class="panel-head">' +
-             '<h3>ط³ط¬ظ„ ط§ظ„ظپظˆط§طھظٹط± (' + list.length + ')</h3>' +
+             '<h3>سجل الفواتير (' + list.length + ')</h3>' +
              '<div style="display:flex;gap:6px;flex-wrap:wrap">' + dirChips + stChips + '</div>' +
            '</div><div class="table-wrap"><table><thead><tr>' +
-             '<th>ط§ظ„طھط§ط±ظٹط®</th><th>ط§ظ„ظ†ظˆط¹</th><th>ط±ظ‚ظ… ط§ظ„ظپط§طھظˆط±ط©</th><th>ط§ظ„ط¬ظ‡ط©</th><th>ط§ظ„طھطµظ†ظٹظپ</th>' +
-             '<th>ط§ظ„ظ…ط¨ظ„ط؛</th><th>ط·ط±ظٹظ‚ط© ط§ظ„ط¯ظپط¹</th><th>ط§ظ„ط­ط§ظ„ط©</th><th>ظ…ظ„ط§ط­ط¸ط§طھ</th><th></th>' +
+             '<th>التاريخ</th><th>النوع</th><th>رقم الفاتورة</th><th>الجهة</th><th>التصنيف</th>' +
+             '<th>المبلغ</th><th>طريقة الدفع</th><th>الحالة</th><th>ملاحظات</th><th></th>' +
            '</tr></thead><tbody>' +
            (list.length ? rows :
              '<tr><td colspan="10"><div class="empty">' +
                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">' +
                '<path d="M4 2v20l2.5-2 2.5 2 2.5-2 2.5 2 2.5-2 2.5 2V2l-2.5 2L14 2l-2.5 2L9 2 6.5 4z"/></svg>' +
-               '<h4>ظ„ط§ طھظˆط¬ط¯ ظپظˆط§طھظٹط±</h4><p>ط³ط¬ظ‘ظ„ ط£ظˆظ„ ظ…ط¨ظ„ط؛ ظˆط§ط±ط¯ ط£ظˆ طµط§ط¯ط±.</p>' +
-               '<button class="btn btn-primary" data-add-inv>ط¥ط¶ط§ظپط© ظپط§طھظˆط±ط©</button></div></td></tr>') +
+               '<h4>لا توجد فواتير</h4><p>سجّل أول مبلغ وارد أو صادر.</p>' +
+               '<button class="btn btn-primary" data-add-inv>إضافة فاتورة</button></div></td></tr>') +
            '</tbody></table></div></div>';
   }
 
-  /* --- ظ†ظ…ظˆط°ط¬ ط§ظ„ظپط§طھظˆط±ط© --- */
+  /* --- نموذج الفاتورة --- */
   function invoiceForm(existing) {
     var v = existing || {
       date: S.todayISO(), dir: 'out', amount: '', party: '', invoiceNo: '',
-      category: 'ط£ط®ط±ظ‰', method: S.METHODS[0], status: 'paid',
+      category: 'أخرى', method: S.METHODS[0], status: 'paid',
       entityId: state.entityId !== 'all' ? state.entityId : S.db.entities[0].id, note: ''
     };
 
@@ -615,41 +615,41 @@
 
     var body =
       '<div class="form-grid">' +
-        '<div class="field full"><label>ظ†ظˆط¹ ط§ظ„ط­ط±ظƒط©</label>' +
+        '<div class="field full"><label>نوع الحركة</label>' +
           '<div class="seg">' +
             '<label class="seg-opt' + (v.dir === 'out' ? ' on out' : '') + '">' +
               '<input type="radio" name="invdir" value="out"' +
-                (v.dir === 'out' ? ' checked' : '') + '><span>â–² طµط§ط¯ط± â€” ظ…ط¨ظ„ط؛ ط®ط±ط¬ ظ…ظ†ظٹ</span></label>' +
+                (v.dir === 'out' ? ' checked' : '') + '><span>▲ صادر — مبلغ خرج مني</span></label>' +
             '<label class="seg-opt' + (v.dir === 'in' ? ' on in' : '') + '">' +
               '<input type="radio" name="invdir" value="in"' +
-                (v.dir === 'in' ? ' checked' : '') + '><span>â–¼ ظˆط§ط±ط¯ â€” ظ…ط¨ظ„ط؛ ط¯ط®ظ„ ظ„ظٹ</span></label>' +
+                (v.dir === 'in' ? ' checked' : '') + '><span>▼ وارد — مبلغ دخل لي</span></label>' +
           '</div></div>' +
-        field('ط§ظ„طھط§ط±ظٹط®', '<input type="date" id="v_date" value="' + v.date + '">') +
-        field('ط§ظ„ظ…ط¨ظ„ط؛ (ط±.ط³)',
+        field('التاريخ', '<input type="date" id="v_date" value="' + v.date + '">') +
+        field('المبلغ (ر.س)',
           '<input type="number" id="v_amount" min="0" step="0.01" value="' + v.amount + '" placeholder="0.00">') +
-        field('ط§ظ„ط¬ظ‡ط© (ط§ظ„ظ…ظˆط±ط¯ / ط§ظ„ط¹ظ…ظٹظ„)',
-          '<input id="v_party" value="' + F.esc(v.party) + '" placeholder="ظ…ط«ط§ظ„: ظ…ط¤ط³ط³ط© ط§ظ„ط¥ظ…ط¯ط§ط¯">') +
-        field('ط±ظ‚ظ… ط§ظ„ظپط§طھظˆط±ط©',
-          '<input id="v_no" value="' + F.esc(v.invoiceNo) + '" placeholder="ط§ط®طھظٹط§ط±ظٹ">') +
-        '<div class="field"><label>ط§ظ„طھطµظ†ظٹظپ</label>' +
+        field('الجهة (المورد / العميل)',
+          '<input id="v_party" value="' + F.esc(v.party) + '" placeholder="مثال: مؤسسة الإمداد">') +
+        field('رقم الفاتورة',
+          '<input id="v_no" value="' + F.esc(v.invoiceNo) + '" placeholder="اختياري">') +
+        '<div class="field"><label>التصنيف</label>' +
           '<select id="v_cat">' + catOptions(v.dir, v.category) + '</select></div>' +
-        field('ط·ط±ظٹظ‚ط© ط§ظ„ط¯ظپط¹', sel('v_method', S.METHODS.map(function (m) {
+        field('طريقة الدفع', sel('v_method', S.METHODS.map(function (m) {
           return [m, m]; }), v.method)) +
-        field('ط§ظ„ظ…ظ†ط´ط£ط©', sel('v_entity', S.db.entities.map(function (x) {
+        field('المنشأة', sel('v_entity', S.db.entities.map(function (x) {
           return [x.id, x.name]; }), v.entityId)) +
-        '<div class="field"><label>ط§ظ„ط­ط§ظ„ط©</label>' +
+        '<div class="field"><label>الحالة</label>' +
           '<select id="v_status">' +
-            '<option value="paid"' + (v.status === 'paid' ? ' selected' : '') + '>ظ…ط³ط¯ظ‘ط¯ط© â€” ط£ط«ظ‘ط±طھ ط¹ظ„ظ‰ ط§ظ„ط±طµظٹط¯</option>' +
-            '<option value="unpaid"' + (v.status === 'unpaid' ? ' selected' : '') + '>ظ…ط¹ظ„ظ‘ظ‚ط© â€” ظ„ظ… طھط¤ط«ط± ط¨ط¹ط¯</option>' +
+            '<option value="paid"' + (v.status === 'paid' ? ' selected' : '') + '>مسدّدة — أثّرت على الرصيد</option>' +
+            '<option value="unpaid"' + (v.status === 'unpaid' ? ' selected' : '') + '>معلّقة — لم تؤثر بعد</option>' +
           '</select></div>' +
-        '<div class="field full"><label>ظ…ظ„ط§ط­ط¸ط§طھ</label>' +
-          '<textarea id="v_note" rows="2" placeholder="ط§ط®طھظٹط§ط±ظٹ">' + F.esc(v.note) + '</textarea></div>' +
+        '<div class="field full"><label>ملاحظات</label>' +
+          '<textarea id="v_note" rows="2" placeholder="اختياري">' + F.esc(v.note) + '</textarea></div>' +
         '<div class="field full" id="v_preview" style="background:var(--bg);padding:12px;border-radius:10px"></div>' +
       '</div>';
 
-    openModal(existing ? 'طھط¹ط¯ظٹظ„ ظپط§طھظˆط±ط©' : 'ظپط§طھظˆط±ط© ط¬ط¯ظٹط¯ط©', body,
-      '<button class="btn btn-primary" id="modalSave">ط­ظپط¸</button>' +
-      '<button class="btn" data-close>ط¥ظ„ط؛ط§ط،</button>',
+    openModal(existing ? 'تعديل فاتورة' : 'فاتورة جديدة', body,
+      '<button class="btn btn-primary" id="modalSave">حفظ</button>' +
+      '<button class="btn" data-close>إلغاء</button>',
       function () {
         var rec = {
           date: $('#v_date').value,
@@ -663,15 +663,15 @@
           status: $('#v_status').value,
           note: $('#v_note').value
         };
-        if (!rec.date) { toast('ط§ظ„طھط§ط±ظٹط® ظ…ط·ظ„ظˆط¨', true); return; }
-        if (!(parseFloat(rec.amount) > 0)) { toast('ط£ط¯ط®ظ„ ظ…ط¨ظ„ط؛ط§ظ‹ ط£ظƒط¨ط± ظ…ظ† طµظپط±', true); return; }
+        if (!rec.date) { toast('التاريخ مطلوب', true); return; }
+        if (!(parseFloat(rec.amount) > 0)) { toast('أدخل مبلغاً أكبر من صفر', true); return; }
 
-        if (existing) { S.updateInvoice(existing.id, rec); toast('طھظ… طھط­ط¯ظٹط« ط§ظ„ظپط§طھظˆط±ط©'); }
-        else { S.addInvoice(rec); toast('طھظ…طھ ط¥ط¶ط§ظپط© ط§ظ„ظپط§طھظˆط±ط©'); }
+        if (existing) { S.updateInvoice(existing.id, rec); toast('تم تحديث الفاتورة'); }
+        else { S.addInvoice(rec); toast('تمت إضافة الفاتورة'); }
         closeModal(); render();
       });
 
-    // طھط­ط¯ظٹط« ط§ظ„طھطµظ†ظٹظپط§طھ ظˆط§ظ„ظ…ط¹ط§ظٹظ†ط© ط¹ظ†ط¯ طھط؛ظٹظٹط± ط§ظ„ظ†ظˆط¹
+    // تحديث التصنيفات والمعاينة عند تغيير النوع
     function refresh() {
       var dir = ($('input[name=invdir]:checked') || {}).value || 'out';
       var cur = $('#v_cat').value;
@@ -685,15 +685,15 @@
       var st = $('#v_status').value;
       var cur2 = S.treasury(null, null, 'all').balance;
       var eff = existing
-        ? cur2 // ط¹ظ†ط¯ ط§ظ„طھط¹ط¯ظٹظ„ ظٹطµط¹ط¨ ط¹ط±ط¶ ط§ظ„ط£ط«ط± ط¨ط¯ظ‚ط© ظ‚ط¨ظ„ ط§ظ„ط­ظپط¸
+        ? cur2 // عند التعديل يصعب عرض الأثر بدقة قبل الحفظ
         : (st === 'paid' ? cur2 + (dir === 'in' ? amt : -amt) : cur2);
       $('#v_preview').innerHTML =
         '<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:12.5px">' +
-          '<span>ط§ظ„ط±طµظٹط¯ ط§ظ„ط­ط§ظ„ظٹ: <strong class="num">' + F.money(cur2) + ' ط±.ط³</strong></span>' +
+          '<span>الرصيد الحالي: <strong class="num">' + F.money(cur2) + ' ر.س</strong></span>' +
           (existing ? '' :
-            '<span>ط§ظ„ط±طµظٹط¯ ط¨ط¹ط¯ ط§ظ„ط­ظپط¸: <strong class="num" style="color:' +
+            '<span>الرصيد بعد الحفظ: <strong class="num" style="color:' +
             (eff < 0 ? 'var(--red)' : 'var(--green)') + '">' + F.money(eff) + ' ط±.ط³</strong></span>') +
-          (st === 'unpaid' ? '<span style="color:var(--amber)">ظپط§طھظˆط±ط© ظ…ط¹ظ„ظ‘ظ‚ط© â€” ظ„ظ† طھط¤ط«ط± ط¹ظ„ظ‰ ط§ظ„ط±طµظٹط¯ ط­طھظ‰ طھظڈط³ط¯ظژظ‘ط¯</span>' : '') +
+          (st === 'unpaid' ? '<span style="color:var(--amber)">فاتورة معلّقة — لن تؤثر على الرصيد حتى تُسدَّد</span>' : '') +
         '</div>';
     }
     $('#modalBody').addEventListener('change', refresh);
@@ -702,7 +702,7 @@
   }
 
   /* ============================================================
-     ط§ظ„طھظ‚ط±ظٹط± ط§ظ„ط´ظ‡ط±ظٹ
+     التقرير الشهري
      ============================================================ */
   function viewMonthly() {
     var all = S.query(null, null, state.entityId);
@@ -721,7 +721,7 @@
         '<td class="num" style="color:' + (m.profit < 0 ? 'var(--red)' : 'var(--green)') + ';font-weight:700">' +
           F.money(m.profit) + '</td>' +
         '<td><span class="delta ' + d.dir + '">' +
-          (d.dir === 'up' ? 'â–²' : d.dir === 'down' ? 'â–¼' : 'â€”') + ' ' + F.pct(d.v) + '</span></td>' +
+          (d.dir === 'up' ? '▲' : d.dir === 'down' ? '▼' : '—') + ' ' + F.pct(d.v) + '</span></td>' +
       '</tr>';
     }).join('');
 
@@ -736,30 +736,30 @@
     }).join('');
 
     return '<div class="page-head"><div>' +
-             '<h2>ط§ظ„طھظ‚ط±ظٹط± ط§ظ„ط´ظ‡ط±ظٹ</h2><p>ظ…ظ„ط®طµ ط§ظ„ط£ط¯ط§ط، ط´ظ‡ط±ط§ظ‹ ط¨ط´ظ‡ط± ظ„ظƒط§ظ…ظ„ ط§ظ„ط³ط¬ظ„</p>' +
+             '<h2>التقرير الشهري</h2><p>ملخص الأداء شهراً بشهر لكامل السجل</p>' +
            '</div>' +
            '<button class="btn no-print" onclick="window.print()">' +
              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
              '<path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>' +
              '<rect x="6" y="14" width="12" height="8"/></svg>ط·ط¨ط§ط¹ط©</button></div>' +
-           '<div class="panel mb"><div class="panel-head"><h3>ط§ظ„ط£ط¯ط§ط، ط§ظ„ط´ظ‡ط±ظٹ</h3></div>' +
+           '<div class="panel mb"><div class="panel-head"><h3>الأداء الشهري</h3></div>' +
              '<div class="table-wrap"><table><thead><tr>' +
-             '<th>ط§ظ„ط´ظ‡ط±</th><th>ط§ظ„طµط±ظپ</th><th>ط§ظ„ط·ظ„ط¨ط§طھ</th><th>ط§ظ„ظ…ط¨ظٹط¹ط§طھ</th>' +
-             '<th>ROAS</th><th>ظ†ط³ط¨ط© ط§ظ„طھط³ظˆظٹظ‚</th><th>ط§ظ„ط±ط¨ط­</th><th>ظ…ظ‚ط§ط±ظ†ط© ط¨ط§ظ„ط³ط§ط¨ظ‚</th>' +
+             '<th>الشهر</th><th>الصرف</th><th>الطلبات</th><th>المبيعات</th>' +
+             '<th>ROAS</th><th>نسبة التسويق</th><th>الربح</th><th>مقارنة بالسابق</th>' +
              '</tr></thead><tbody>' +
-             (months.length ? rows : '<tr><td colspan="8">' + C.empty('ظ„ط§ طھظˆط¬ط¯ ط¨ظٹط§ظ†ط§طھ ط¨ط¹ط¯') + '</td></tr>') +
+             (months.length ? rows : '<tr><td colspan="8">' + C.empty('لا توجد بيانات بعد') + '</td></tr>') +
              '</tbody></table></div></div>' +
-           '<div class="panel"><div class="panel-head"><h3>ط§ظ„ط£ط¯ط§ط، ط­ط³ط¨ ط§ظ„ظ…ظ†ط´ط£ط©</h3></div>' +
+           '<div class="panel"><div class="panel-head"><h3>الأداء حسب المنشأة</h3></div>' +
              '<div class="table-wrap"><table><thead><tr>' +
-             '<th>ط§ظ„ظ…ظ†ط´ط£ط©</th><th>ط§ظ„طµط±ظپ</th><th>ط§ظ„ظ…ط¨ظٹط¹ط§طھ</th><th>ROAS</th>' +
-             '<th>ظ†ط³ط¨ط© ط§ظ„طھط³ظˆظٹظ‚</th><th>ط§ظ„ط±ط¨ط­</th>' +
+             '<th>المنشأة</th><th>الصرف</th><th>المبيعات</th><th>ROAS</th>' +
+             '<th>نسبة التسويق</th><th>الربح</th>' +
              '</tr></thead><tbody>' +
-             (ent.length ? entRows : '<tr><td colspan="6">' + C.empty('ظ„ط§ طھظˆط¬ط¯ ط¨ظٹط§ظ†ط§طھ ط¨ط¹ط¯') + '</td></tr>') +
+             (ent.length ? entRows : '<tr><td colspan="6">' + C.empty('لا توجد بيانات بعد') + '</td></tr>') +
              '</tbody></table></div></div>';
   }
 
   /* ============================================================
-     ط§ظ„ظ‚ظ†ظˆط§طھ
+     القنوات
      ============================================================ */
   function viewChannels() {
     var all = S.query(null, null, 'all');
@@ -773,19 +773,19 @@
         '<td><span class="num" style="font-family:monospace">' + c.color + '</span></td>' +
         '<td class="num">' + F.int(used[c.id] || 0) + '</td>' +
         '<td><div class="t-actions">' +
-          '<button class="btn btn-sm" data-ch-edit="' + c.id + '">طھط¹ط¯ظٹظ„</button>' +
-          '<button class="btn btn-sm btn-danger" data-ch-del="' + c.id + '">ط­ط°ظپ</button>' +
+          '<button class="btn btn-sm" data-ch-edit="' + c.id + '">تعديل</button>' +
+          '<button class="btn btn-sm btn-danger" data-ch-del="' + c.id + '">حذف</button>' +
         '</div></td></tr>';
     }).join('');
 
     return '<div class="page-head"><div>' +
-             '<h2>ط§ظ„ظ‚ظ†ظˆط§طھ ظˆط§ظ„ظ…ظ†طµط§طھ</h2>' +
-             '<p>ظ‚ظ†ظˆط§طھ ط§ظ„طµط±ظپ ط§ظ„طھط³ظˆظٹظ‚ظٹ â€” ط§ظ„ط£ظ„ظˆط§ظ† ظ…ط£ط®ظˆط°ط© ظ…ظ† ظ„ظˆط­ط© ظ…ظڈطھط­ظ‚ظژظ‘ظ‚ ظ…ظ†ظ‡ط§ ظ„ط¥ظ…ظƒط§ظ†ظٹط© ط§ظ„ظˆطµظˆظ„</p>' +
+             '<h2>القنوات والمنصات</h2>' +
+             '<p>قنوات الصرف التسويقي — الألوان مأخوذة من لوحة مُتحقَّق منها لإمكانية الوصول</p>' +
            '</div><button class="btn btn-primary" id="addCh">' +
              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-             '<path d="M12 5v14M5 12h14"/></svg>ظ‚ظ†ط§ط© ط¬ط¯ظٹط¯ط©</button></div>' +
+             '<path d="M12 5v14M5 12h14"/></svg>قناة جديدة</button></div>' +
            '<div class="panel"><div class="table-wrap"><table><thead><tr>' +
-             '<th>ط§ظ„ظ‚ظ†ط§ط©</th><th>ط§ظ„ظ„ظˆظ†</th><th>ط¹ط¯ط¯ ط§ظ„ط¥ط¯ط®ط§ظ„ط§طھ</th><th></th>' +
+             '<th>القناة</th><th>اللون</th><th>عدد الإدخالات</th><th></th>' +
            '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
   }
 
@@ -810,25 +810,25 @@
           (n === c.icon ? 'var(--brand)' : 'var(--line)') + '">' + F.icon(n) + '</span></label>';
     }).join('');
 
-    openModal(existing ? 'طھط¹ط¯ظٹظ„ ظ‚ظ†ط§ط©' : 'ظ‚ظ†ط§ط© ط¬ط¯ظٹط¯ط©',
+    openModal(existing ? 'تعديل قناة' : 'قناة جديدة',
       '<div class="form-grid">' +
-        '<div class="field full"><label>ط§ط³ظ… ط§ظ„ظ‚ظ†ط§ط©</label>' +
-          '<input id="ch_name" value="' + F.esc(c.name) + '" placeholder="ظ…ط«ط§ظ„: ط³ظ†ط§ط¨ ط´ط§طھ"></div>' +
-        '<div class="field full"><label>ط§ظ„ظ„ظˆظ†</label>' +
+        '<div class="field full"><label>اسم القناة</label>' +
+          '<input id="ch_name" value="' + F.esc(c.name) + '" placeholder="مثال: سناب شات"></div>' +
+        '<div class="field full"><label>اللون</label>' +
           '<div style="display:flex;gap:8px;flex-wrap:wrap">' + swatches + '</div>' +
-          '<span class="hint">ط£ظ„ظˆط§ظ† ظ…ط®طھط§ط±ط© ظˆظ…ظڈط®طھط¨ظژط±ط© ظ„ظ„طھظ…ظٹظٹط² ط§ظ„ط¨طµط±ظٹ ظˆط¹ظ…ظ‰ ط§ظ„ط£ظ„ظˆط§ظ†</span></div>' +
-        '<div class="field full"><label>ط§ظ„ط£ظٹظ‚ظˆظ†ط©</label>' +
+          '<span class="hint">ألوان مختارة ومُختبَرة للتمييز البصري وعمى الألوان</span></div>' +
+        '<div class="field full"><label>الأيقونة</label>' +
           '<div style="display:flex;gap:8px;flex-wrap:wrap">' + iconOpts + '</div></div>' +
       '</div>',
-      '<button class="btn btn-primary" id="modalSave">ط­ظپط¸</button>' +
-      '<button class="btn" data-close>ط¥ظ„ط؛ط§ط،</button>',
+      '<button class="btn btn-primary" id="modalSave">حفظ</button>' +
+      '<button class="btn" data-close>إلغاء</button>',
       function () {
         var name = $('#ch_name').value.trim();
-        if (!name) { toast('ط§ط³ظ… ط§ظ„ظ‚ظ†ط§ط© ظ…ط·ظ„ظˆط¨', true); return; }
+        if (!name) { toast('اسم القناة مطلوب', true); return; }
         var color = ($('input[name=chcolor]:checked') || {}).value || S.PALETTE[0];
         var ic = ($('input[name=chicon]:checked') || {}).value || 'dot';
-        if (existing) { S.updateChannel(existing.id, { name: name, color: color, icon: ic }); toast('طھظ… ط§ظ„طھط­ط¯ظٹط«'); }
-        else { S.addChannel(name, color, ic); toast('طھظ…طھ ط§ظ„ط¥ط¶ط§ظپط©'); }
+        if (existing) { S.updateChannel(existing.id, { name: name, color: color, icon: ic }); toast('تم التحديث'); }
+        else { S.addChannel(name, color, ic); toast('تمت الإضافة'); }
         closeModal(); render();
       });
 
@@ -847,7 +847,7 @@
   }
 
   /* ============================================================
-     ط§ظ„ظ…ظ†ط´ط¢طھ
+     المنشآت
      ============================================================ */
   function viewEntities() {
     var all = S.query(null, null, 'all');
@@ -858,30 +858,30 @@
       return '<tr><td style="font-weight:600">' + F.esc(x.name) + '</td>' +
         '<td class="num">' + F.int(used[x.id] || 0) + '</td>' +
         '<td><div class="t-actions">' +
-          '<button class="btn btn-sm" data-ent-edit="' + x.id + '">طھط¹ط¯ظٹظ„</button>' +
-          '<button class="btn btn-sm btn-danger" data-ent-del="' + x.id + '">ط­ط°ظپ</button>' +
+          '<button class="btn btn-sm" data-ent-edit="' + x.id + '">تعديل</button>' +
+          '<button class="btn btn-sm btn-danger" data-ent-del="' + x.id + '">حذف</button>' +
         '</div></td></tr>';
     }).join('');
 
-    return '<div class="page-head"><div><h2>ط§ظ„ظ…ظ†ط´ط¢طھ</h2>' +
-             '<p>ط§ظ„ط¬ظ‡ط§طھ ط£ظˆ ط§ظ„ظپط±ظˆط¹ ط§ظ„طھظٹ طھظڈط³ط¬ظژظ‘ظ„ ظ…طµط±ظˆظپط§طھظ‡ط§ ظپظٹ ط§ظ„ظ†ط¸ط§ظ…</p></div>' +
+    return '<div class="page-head"><div><h2>المنشآت</h2>' +
+             '<p>الجهات أو الفروع التي تُسجَّل مصروفاتها في النظام</p></div>' +
            '<button class="btn btn-primary" id="addEnt">' +
              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-             '<path d="M12 5v14M5 12h14"/></svg>ظ…ظ†ط´ط£ط© ط¬ط¯ظٹط¯ط©</button></div>' +
+             '<path d="M12 5v14M5 12h14"/></svg>منشأة جديدة</button></div>' +
            '<div class="panel"><div class="table-wrap"><table><thead><tr>' +
-             '<th>ط§ظ„ظ…ظ†ط´ط£ط©</th><th>ط¹ط¯ط¯ ط§ظ„ط¥ط¯ط®ط§ظ„ط§طھ</th><th></th>' +
+             '<th>المنشأة</th><th>عدد الإدخالات</th><th></th>' +
            '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
   }
 
   /* ============================================================
-     ط³ط¬ظ„ ط§ظ„طھط¹ط¯ظٹظ„ط§طھ
+     سجل التعديلات
      ============================================================ */
   function viewLog() {
     var rows = S.db.log.map(function (l) {
       var d = new Date(l.ts);
-      var colors = { 'ط¥ط¶ط§ظپط©': 'var(--green)', 'طھط¹ط¯ظٹظ„': 'var(--amber)', 'ط­ط°ظپ': 'var(--red)' };
+      var colors = { 'إضافة': 'var(--green)', 'تعديل': 'var(--amber)', 'حذف': 'var(--red)' };
       return '<tr>' +
-        '<td class="num">' + F.arDate(S.iso(d)) + ' â€” ' +
+        '<td class="num">' + F.arDate(S.iso(d)) + ' — ' +
           String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + '</td>' +
         '<td><span class="tag" style="background:var(--bg)">' +
           '<i class="dot" style="background:' + (colors[l.action] || 'var(--muted)') + '"></i>' +
@@ -890,106 +890,106 @@
         '<td>' + F.esc(l.user) + '</td></tr>';
     }).join('');
 
-    return '<div class="page-head"><div><h2>ط³ط¬ظ„ ط§ظ„طھط¹ط¯ظٹظ„ط§طھ</h2>' +
-             '<p>ظƒظ„ ط¥ط¶ط§ظپط© ط£ظˆ طھط¹ط¯ظٹظ„ ط£ظˆ ط­ط°ظپ ظٹظڈط³ط¬ظژظ‘ظ„ ظ‡ظ†ط§ (ط¢ط®ط± 500 ط¹ظ…ظ„ظٹط©)</p></div></div>' +
+    return '<div class="page-head"><div><h2>سجل التعديلات</h2>' +
+             '<p>كل إضافة أو تعديل أو حذف يُسجَّل هنا (آخر 500 عملية)</p></div></div>' +
            '<div class="panel"><div class="table-wrap"><table><thead><tr>' +
-             '<th>ط§ظ„طھط§ط±ظٹط® ظˆط§ظ„ظˆظ‚طھ</th><th>ط§ظ„ط¹ظ…ظ„ظٹط©</th><th>ط§ظ„طھظپط§طµظٹظ„</th><th>ط§ظ„ظ…ط³طھط®ط¯ظ…</th>' +
+             '<th>التاريخ والوقت</th><th>العملية</th><th>التفاصيل</th><th>المستخدم</th>' +
            '</tr></thead><tbody>' +
-           (S.db.log.length ? rows : '<tr><td colspan="4">' + C.empty('ط§ظ„ط³ط¬ظ„ ظپط§ط±ط؛') + '</td></tr>') +
+           (S.db.log.length ? rows : '<tr><td colspan="4">' + C.empty('السجل فارغ') + '</td></tr>') +
            '</tbody></table></div></div>';
   }
 
   /* ============================================================
-     ط§ظ„ظپط±ظٹظ‚ ظˆط§ظ„طµظ„ط§ط­ظٹط§طھ
+     الفريق والصلاحيات
      ============================================================ */
   function viewTeam() {
     var canManage = ['owner', 'admin'].indexOf(S.me.role) >= 0;
 
     var rows = S.db.members.map(function (m) {
       return '<tr>' +
-        '<td>' + (m.isMe ? '<strong>ط£ظ†طھ</strong>' : '<span class="num" style="font-family:monospace;font-size:12px">' +
-          F.esc(m.userId.slice(0, 8)) + 'â€¦</span>') + '</td>' +
+        '<td>' + (m.isMe ? '<strong>أنت</strong>' : '<span class="num" style="font-family:monospace;font-size:12px">' +
+          F.esc(m.userId.slice(0, 8)) + '…</span>') + '</td>' +
         '<td><span class="tag" style="background:var(--brand-50);color:var(--brand)">' +
           F.esc(S.roleName(m.role)) + '</span></td>' +
         '<td>' + (canManage && !m.isMe
-          ? '<button class="btn btn-sm btn-danger" data-mem-del="' + m.userId + '">ط¥ط²ط§ظ„ط©</button>'
-          : '<span style="color:var(--muted)">â€”</span>') + '</td></tr>';
+          ? '<button class="btn btn-sm btn-danger" data-mem-del="' + m.userId + '">إزالة</button>'
+          : '<span style="color:var(--muted)">—</span>') + '</td></tr>';
     }).join('');
 
     var link = window.location.origin + window.location.pathname;
 
     return '<div class="page-head"><div>' +
-             '<h2>ط§ظ„ظپط±ظٹظ‚ ظˆط§ظ„طµظ„ط§ط­ظٹط§طھ</h2>' +
-             '<p>ظ…ظ†ط´ط£ط© آ«' + F.esc(S.db.orgName) + 'آ» â€” ' + S.db.members.length + ' ط¹ط¶ظˆ</p>' +
+             '<h2>الفريق والصلاحيات</h2>' +
+             '<p>منشأة «' + F.esc(S.db.orgName) + '» — ' + S.db.members.length + ' عضو</p>' +
            '</div>' +
            (canManage ? '<button class="btn btn-primary" id="inviteBtn">' +
              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-             '<path d="M12 5v14M5 12h14"/></svg>ط¯ط¹ظˆط© ط¹ط¶ظˆ</button>' : '') +
+             '<path d="M12 5v14M5 12h14"/></svg>دعوة عضو</button>' : '') +
            '</div>' +
-           '<div class="panel mb"><div class="panel-head"><h3>ط±ط§ط¨ط· ط§ظ„ظ†ط¸ط§ظ…</h3></div>' +
+           '<div class="panel mb"><div class="panel-head"><h3>رابط النظام</h3></div>' +
              '<div class="panel-body">' +
-               '<p style="color:var(--muted);margin-bottom:12px">ط´ط§ط±ظƒ ظ‡ط°ط§ ط§ظ„ط±ط§ط¨ط· ظ…ط¹ ظپط±ظٹظ‚ظƒ. ' +
-                 'ظƒظ„ ظˆط§ط­ط¯ ظٹظ†ط´ط¦ ط­ط³ط§ط¨ظ‡طŒ ظˆط¨ط¹ط¯ ظ…ط§ طھط¯ط¹ظˆظ‡ ظٹط´ظˆظپ ط¨ظٹط§ظ†ط§طھ ط§ظ„ظ…ظ†ط´ط£ط© ظˆظٹظ‚ط¯ط± ظٹط¯ط®ظ‘ظ„.</p>' +
+               '<p style="color:var(--muted);margin-bottom:12px">شارك هذا الرابط مع فريقك. ' +
+                 'كل واحد ينشئ حسابه، وبعد ما تدعوه يشوف بيانات المنشأة ويقدر يدخّل.</p>' +
                '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
                  '<input readonly id="shareLink" value="' + F.esc(link) +
                    '" dir="ltr" style="flex:1;min-width:240px;border:1px solid var(--line);' +
                    'border-radius:10px;padding:10px 12px;background:var(--bg);font-size:13px">' +
-                 '<button class="btn" id="copyLink">ظ†ط³ط® ط§ظ„ط±ط§ط¨ط·</button>' +
+                 '<button class="btn" id="copyLink">نسخ الرابط</button>' +
                '</div></div></div>' +
-           '<div class="panel mb"><div class="panel-head"><h3>ط§ظ„ط£ط¹ط¶ط§ط،</h3></div>' +
+           '<div class="panel mb"><div class="panel-head"><h3>الأعضاء</h3></div>' +
              '<div class="table-wrap"><table><thead><tr>' +
-               '<th>ط§ظ„ط¹ط¶ظˆ</th><th>ط§ظ„طµظ„ط§ط­ظٹط©</th><th></th>' +
+               '<th>العضو</th><th>الصلاحية</th><th></th>' +
              '</tr></thead><tbody>' + rows + '</tbody></table></div></div>' +
-           '<div class="panel"><div class="panel-head"><h3>ظ…ط¹ظ†ظ‰ ط§ظ„طµظ„ط§ط­ظٹط§طھ</h3></div>' +
+           '<div class="panel"><div class="panel-head"><h3>معنى الصلاحيات</h3></div>' +
              '<div class="table-wrap"><table><thead><tr>' +
-               '<th>ط§ظ„طµظ„ط§ط­ظٹط©</th><th>ظٹظ‚ط¯ط± ظٹط³ظˆظٹ</th>' +
+               '<th>الصلاحية</th><th>يقدر يسوي</th>' +
              '</tr></thead><tbody>' +
-               '<tr><td><strong>ظ…ط§ظ„ظƒ</strong></td><td>ظƒظ„ ط´ظٹ â€” ط¨ظ…ط§ ظپظٹظ‡ ط¥ط¯ط§ط±ط© ط§ظ„ظپط±ظٹظ‚</td></tr>' +
-               '<tr><td><strong>ظ…ط¯ظٹط±</strong></td><td>ط¥ط¯ط®ط§ظ„ ظˆطھط¹ط¯ظٹظ„ ظˆط­ط°ظپ + ط¯ط¹ظˆط© ط£ط¹ط¶ط§ط،</td></tr>' +
-               '<tr><td><strong>ط¹ط¶ظˆ</strong></td><td>ط¥ط¯ط®ط§ظ„ ظˆطھط¹ط¯ظٹظ„ ظˆط­ط°ظپ ط§ظ„ط¨ظٹط§ظ†ط§طھ</td></tr>' +
-               '<tr><td><strong>ظ…ط´ط§ظ‡ط¯ ظپظ‚ط·</strong></td><td>ط§ظ„ط§ط·ظ„ط§ط¹ ط¹ظ„ظ‰ ط§ظ„طھظ‚ط§ط±ظٹط± ط¯ظˆظ† ط£ظٹ طھط¹ط¯ظٹظ„</td></tr>' +
+               '<tr><td><strong>مالك</strong></td><td>كل شي — بما فيه إدارة الفريق</td></tr>' +
+               '<tr><td><strong>مدير</strong></td><td>إدخال وتعديل وحذف + دعوة أعضاء</td></tr>' +
+               '<tr><td><strong>عضو</strong></td><td>إدخال وتعديل وحذف البيانات</td></tr>' +
+               '<tr><td><strong>مشاهد فقط</strong></td><td>الاطلاع على التقارير دون أي تعديل</td></tr>' +
              '</tbody></table></div></div>';
   }
 
   /* ============================================================
-     ط§ظ„ط¥ط¹ط¯ط§ط¯ط§طھ
+     الإعدادات
      ============================================================ */
   function viewSettings() {
     var s = S.db.settings;
-    return '<div class="page-head"><div><h2>ط§ظ„ط¥ط¹ط¯ط§ط¯ط§طھ</h2>' +
-             '<p>ط§ظ„ط­ط³ط§ط¨ ط§ظ„ط¨ظ†ظƒظٹ ظˆط§ظ„ظ†ط³ط® ط§ظ„ط§ط­طھظٹط§ط·ظٹ</p></div></div>' +
+    return '<div class="page-head"><div><h2>الإعدادات</h2>' +
+             '<p>الحساب البنكي والنسخ الاحتياطي</p></div></div>' +
       '<div class="grid grid-2">' +
-        '<div class="panel"><div class="panel-head"><h3>ط§ظ„ط­ط³ط§ط¨ ط§ظ„ط¨ظ†ظƒظٹ</h3></div><div class="panel-body">' +
-          '<div class="field" style="margin-bottom:12px"><label>ط§ط³ظ… ط§ظ„ط­ط³ط§ط¨</label>' +
+        '<div class="panel"><div class="panel-head"><h3>الحساب البنكي</h3></div><div class="panel-body">' +
+          '<div class="field" style="margin-bottom:12px"><label>اسم الحساب</label>' +
             '<input id="setBank" value="' + F.esc(s.bankName || '') +
-            '" placeholder="ظ…ط«ط§ظ„: ط§ظ„ط­ط³ط§ط¨ ط§ظ„ط±ط¦ظٹط³ظٹ â€” ط§ظ„ط±ط§ط¬ط­ظٹ"></div>' +
-          '<div class="field"><label>ط§ظ„ط±طµظٹط¯ ط§ظ„ط§ظپطھطھط§ط­ظٹ (ط±.ط³)</label>' +
+            '" placeholder="مثال: الحساب الرئيسي — الراجحي"></div>' +
+          '<div class="field"><label>الرصيد الافتتاحي (ر.س)</label>' +
             '<input type="number" id="setOpening" step="0.01" value="' + (s.openingBalance || 0) + '">' +
-            '<span class="hint">ط§ظ„ط±طµظٹط¯ ظ‚ط¨ظ„ طھط³ط¬ظٹظ„ ط£ظٹ ظپط§طھظˆط±ط© â€” ظƒظ„ ط§ظ„ط­ط³ط§ط¨ط§طھ طھظڈط¨ظ†ظ‰ ط¹ظ„ظٹظ‡</span></div>' +
-          '<button class="btn btn-primary" id="saveSet" style="margin-top:12px">ط­ظپط¸</button>' +
+            '<span class="hint">الرصيد قبل تسجيل أي فاتورة — كل الحسابات تُبنى عليه</span></div>' +
+          '<button class="btn btn-primary" id="saveSet" style="margin-top:12px">حفظ</button>' +
         '</div></div>' +
-        '<div class="panel"><div class="panel-head"><h3>ط§ظ„ظ†ط³ط® ط§ظ„ط§ط­طھظٹط§ط·ظٹ</h3></div><div class="panel-body">' +
-          '<p style="color:var(--muted);margin-bottom:14px">ط¨ظٹط§ظ†ط§طھظƒ ظ…ط­ظپظˆط¸ط© ظپظٹ ط§ظ„ظ‚ط§ط¹ط¯ط© ط§ظ„ط³ط­ط§ط¨ظٹط© ظˆظ…ظ†ط³ظˆط®ط© طھظ„ظ‚ط§ط¦ظٹط§ظ‹. ' +
-            'طھظ‚ط¯ط± طھظ†ط²ظ‘ظ„ ظ†ط³ط®ط© ط¥ط¶ط§ظپظٹط© ط¹ظ†ط¯ظƒ ظ…طھظ‰ ظ…ط§ ط­ط¨ظٹطھ.</p>' +
+        '<div class="panel"><div class="panel-head"><h3>النسخ الاحتياطي</h3></div><div class="panel-body">' +
+          '<p style="color:var(--muted);margin-bottom:14px">بياناتك محفوظة في القاعدة السحابية ومنسوخة تلقائياً. ' +
+            'تقدر تنزّل نسخة إضافية عندك متى ما حبيت.</p>' +
           '<div style="display:flex;gap:10px;flex-wrap:wrap">' +
-            '<button class="btn" id="dlJSON">طھظ†ط²ظٹظ„ ظ†ط³ط®ط© JSON</button>' +
+            '<button class="btn" id="dlJSON">تنزيل نسخة JSON</button>' +
           '</div></div></div>' +
-        '<div class="panel"><div class="panel-head"><h3>ط­ط³ط§ط¨ظƒ</h3></div><div class="panel-body">' +
+        '<div class="panel"><div class="panel-head"><h3>حسابك</h3></div><div class="panel-body">' +
           '<div style="display:flex;flex-direction:column;gap:8px;font-size:13.5px">' +
-            '<div><span style="color:var(--muted)">ط§ظ„ط¨ط±ظٹط¯: </span><strong dir="ltr">' +
+            '<div><span style="color:var(--muted)">البريد: </span><strong dir="ltr">' +
               F.esc(S.me.email) + '</strong></div>' +
-            '<div><span style="color:var(--muted)">ط§ظ„طµظ„ط§ط­ظٹط©: </span><strong>' +
+            '<div><span style="color:var(--muted)">الصلاحية: </span><strong>' +
               F.esc(S.roleName(S.me.role)) + '</strong></div>' +
-            '<div><span style="color:var(--muted)">ط§ظ„ظ…ظ†ط´ط£ط©: </span><strong>' +
+            '<div><span style="color:var(--muted)">المنشأة: </span><strong>' +
               F.esc(S.db.orgName) + '</strong></div>' +
           '</div>' +
-          '<button class="btn btn-danger" id="logoutBtn2" style="margin-top:14px">طھط³ط¬ظٹظ„ ط§ظ„ط®ط±ظˆط¬</button>' +
+          '<button class="btn btn-danger" id="logoutBtn2" style="margin-top:14px">تسجيل الخروج</button>' +
         '</div></div>' +
       '</div>';
   }
 
   /* ============================================================
-     ط§ظ„ظ…ظˆط¬ظ‘ظ‡
+     الموجّه
      ============================================================ */
   var VIEWS = {
     dashboard: viewDashboard, entries: viewEntries, invoices: viewInvoices,
@@ -999,7 +999,7 @@
 
   function render() {
     var sel2 = $('#entityFilter');
-    sel2.innerHTML = '<option value="all">ظƒظ„ ط§ظ„ظ…ظ†ط´ط¢طھ</option>' +
+    sel2.innerHTML = '<option value="all">كل المنشآت</option>' +
       S.db.entities.map(function (e) {
         return '<option value="' + e.id + '">' + F.esc(e.name) + '</option>';
       }).join('');
@@ -1016,14 +1016,14 @@
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
         'style="width:17px;height:17px"><rect x="3" y="11" width="18" height="11" rx="2"/>' +
         '<path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' +
-        'طµظ„ط§ط­ظٹطھظƒ آ«ظ…ط´ط§ظ‡ط¯ ظپظ‚ط·آ» â€” طھظ‚ط¯ط± طھط·ظ‘ظ„ط¹ ط¹ظ„ظ‰ ظƒظ„ ط§ظ„طھظ‚ط§ط±ظٹط± ظ„ظƒظ† ظ„ط§ ظٹظ…ظƒظ†ظƒ ط§ظ„ط¥ط¶ط§ظپط© ط£ظˆ ط§ظ„طھط¹ط¯ظٹظ„.' +
+        'صلاحيتك «مشاهد فقط» — تقدر تطّلع على كل التقارير لكن لا يمكنك الإضافة أو التعديل.' +
       '</div>';
 
     $('#viewHost').innerHTML = banner + (VIEWS[state.view] || viewDashboard)();
     window.scrollTo(0, 0);
   }
 
-  /** ظٹط؛ظ„ظ‘ظپ ط¹ظ…ظ„ظٹط© ط؛ظٹط± ظ…طھط²ط§ظ…ظ†ط© ط¨ط±ط³ط§ظ„ط© ط®ط·ط£ ظ…ظˆط­ظ‘ط¯ط© */
+  /** يغلّف عملية غير متزامنة برسالة خطأ موحّدة */
   async function run(fn, okMsg) {
     try {
       await fn();
@@ -1031,7 +1031,7 @@
       render();
       return true;
     } catch (e) {
-      toast(e.message || 'طھط¹ط°ظ‘ط± ط¥طھظ…ط§ظ… ط§ظ„ط¹ظ…ظ„ظٹط©', true);
+      toast(e.message || 'تعذّر إتمام العملية', true);
       return false;
     }
   }
