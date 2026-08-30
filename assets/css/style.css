@@ -137,6 +137,12 @@ svg{width:18px;height:18px;flex:none}
 .nav-item.active svg{color:#8b7ff8;opacity:1}
 
 .sidebar-foot{border-top:1px solid rgba(255,255,255,.07);padding-top:14px;margin-top:10px;padding-inline:8px}
+.back-hub{
+  display:flex;align-items:center;gap:8px;font-size:12.5px;color:#a9abcd;
+  padding:8px 10px;border-radius:9px;margin-bottom:10px;transition:.16s;
+}
+.back-hub svg{width:15px;height:15px}
+.back-hub:hover{background:rgba(255,255,255,.06);color:#fff}
 .muted-sm{font-size:11px;color:#7c7fa6;display:block}
 .sidebar-foot strong{font-size:13px;color:#e8e9f6;font-weight:600}
 

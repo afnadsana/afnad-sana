@@ -1,0 +1,109 @@
+/* ============================================================
+   hub.css — بوابة المسارات
+   ============================================================ */
+:root{
+  --brand:#4f46e5;
+  --brand-50:#eef0fe;
+  --ink:#1f2135;
+  --muted:#8a8fa8;
+  --line:#e9eaf2;
+  --bg:#f6f7fb;
+  --card:#fff;
+  --shadow:0 1px 2px rgba(24,26,60,.04), 0 8px 24px rgba(24,26,60,.06);
+  --shadow-lg:0 18px 48px rgba(24,26,60,.16);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:"Tajawal","Segoe UI",Tahoma,Arial,sans-serif;
+  background:var(--bg);color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  min-height:100vh;display:flex;align-items:center;justify-content:center;padding:40px 20px;
+}
+a{text-decoration:none;color:inherit}
+svg{width:22px;height:22px}
+
+.hub{width:min(1080px,100%)}
+
+/* ---------- الرأس ---------- */
+.hub-head{text-align:center;margin-bottom:38px}
+.logo{display:inline-flex;align-items:center;gap:10px;margin-bottom:10px}
+.logo-mark{
+  width:38px;height:38px;border-radius:11px;display:grid;place-items:center;color:#fff;
+  background:linear-gradient(140deg,var(--brand),#7c6cf5);
+  box-shadow:0 6px 18px rgba(79,70,229,.4);
+}
+.logo-mark svg{width:19px;height:19px}
+.logo-text{font-size:26px;font-weight:800;letter-spacing:-.5px}
+.logo-text b{color:var(--brand)}
+.hub-sub{font-size:14px;color:var(--muted);margin-bottom:16px}
+.hub-domain{
+  display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);
+  padding:7px 16px;border-radius:20px;font-size:12.5px;color:var(--muted);box-shadow:var(--shadow);
+}
+.dot-live{width:7px;height:7px;border-radius:50%;background:#12b981;flex:none}
+
+/* ---------- الشبكة ---------- */
+.tracks{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+
+.track{
+  background:var(--card);border:1px solid var(--line);border-radius:18px;
+  padding:22px;min-height:196px;display:flex;flex-direction:column;
+  box-shadow:var(--shadow);transition:transform .18s, box-shadow .18s, border-color .18s;
+}
+.track-ico{
+  width:46px;height:46px;border-radius:14px;background:var(--brand-50);color:var(--brand);
+  display:grid;place-items:center;margin-bottom:16px;transition:.18s;
+}
+.track h2{font-size:16px;font-weight:700;margin-bottom:7px}
+.track p{font-size:12.5px;color:var(--muted);line-height:1.75;flex:1}
+.track-foot{display:flex;align-items:center;justify-content:space-between;margin-top:16px}
+
+.badge{font-size:11.5px;font-weight:700;padding:4px 12px;border-radius:20px}
+.badge.on{background:var(--brand-50);color:var(--brand)}
+.badge.off{background:#f2f3f8;color:#a0a4b8}
+
+.go{
+  width:34px;height:34px;border-radius:50%;display:grid;place-items:center;
+  background:#f4f5fa;color:#b9bcd0;transition:.18s;
+}
+.go svg{width:16px;height:16px}
+
+/* المتاحة */
+.track.ready{cursor:pointer}
+.track.ready:hover{
+  transform:translateY(-4px);box-shadow:var(--shadow-lg);border-color:#d5d7ea;
+}
+.track.ready:hover .go{background:var(--brand);color:#fff}
+.track.ready:hover .track-ico{background:var(--brand);color:#fff}
+.track.ready:focus-visible{outline:3px solid var(--brand-50);outline-offset:3px}
+
+/* قيد التطوير */
+.track.soon{opacity:.62}
+.track.soon .track-ico{background:#f2f3f8;color:#a8adc2}
+
+/* بطاقة الإضافة */
+.track.new{
+  border:2px dashed #d9dbe9;background:transparent;box-shadow:none;
+  align-items:center;justify-content:center;text-align:center;
+}
+.track.new .plus{
+  width:42px;height:42px;border-radius:50%;background:#eceef6;color:#a8adc2;
+  display:grid;place-items:center;margin-bottom:12px;
+}
+.track.new h2{font-size:14px;color:#a0a4b8;font-weight:600}
+.track.new p{flex:none;font-size:12px}
+
+/* ---------- التذييل ---------- */
+.hub-foot{text-align:center;margin-top:30px}
+.hub-foot p{font-size:12.5px;color:var(--muted)}
+
+/* ---------- الاستجابة ---------- */
+@media(max-width:880px){
+  .tracks{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:560px){
+  .tracks{grid-template-columns:1fr}
+  body{padding:28px 16px}
+  .track{min-height:auto}
+}

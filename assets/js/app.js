@@ -411,9 +411,9 @@
         '<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:12.5px">' +
           '<span>ROAS: <strong class="num">' + F.roas(cost > 0 ? sales / cost : 0) + '</strong></span>' +
           '<span>تكلفة الطلب: <strong class="num">' +
-            F.money(orders > 0 ? cost / orders : 0) + ' ط±.ط³</strong></span>' +
+            F.money(orders > 0 ? cost / orders : 0) + ' ر.س</strong></span>' +
           '<span>الربح: <strong class="num" style="color:' +
-            (p < 0 ? 'var(--red)' : 'var(--green)') + '">' + F.money(p) + ' ط±.ط³</strong></span>' +
+            (p < 0 ? 'var(--red)' : 'var(--green)') + '">' + F.money(p) + ' ر.س</strong></span>' +
           '<span>نسبة التسويق: <strong class="num">' +
             F.pct(sales > 0 ? (cost / sales) * 100 : 0) + '</strong></span>' +
         '</div>';
@@ -450,17 +450,17 @@
       '<div class="hero-balance">' +
         '<div class="hero-main">' +
           '<div class="hero-label">الرصيد الحالي في الحساب البنكي</div>' +
-          '<div class="hero-num' + (T.balance < 0 ? ' neg' : '') + '">' + F.money(T.balance) + ' ط±.ط³</div>' +
+          '<div class="hero-num' + (T.balance < 0 ? ' neg' : '') + '">' + F.money(T.balance) + ' ر.س</div>' +
           '<div class="hero-sub">الرصيد الافتتاحي ' + F.money(T.opening) + ' + الوارد ' +
             F.money(T.paidIn) + ' − المنصرف ' + F.money(T.paidOut) + '</div>' +
         '</div>' +
         '<div class="hero-side">' +
           '<div class="hs-item"><span class="k">إجمالي ما دخل لي</span>' +
-            '<span class="v in num">+ ' + F.money(T.paidIn) + ' ط±.ط³</span></div>' +
+            '<span class="v in num">+ ' + F.money(T.paidIn) + ' ر.س</span></div>' +
           '<div class="hs-item"><span class="k">إجمالي ما صرفته</span>' +
-            '<span class="v out num">âˆ’ ' + F.money(T.paidOut) + ' ط±.ط³</span></div>' +
+            '<span class="v out num">− ' + F.money(T.paidOut) + ' ر.س</span></div>' +
           '<div class="hs-item"><span class="k">الرصيد الافتتاحي</span>' +
-            '<span class="v num">' + F.money(T.opening) + ' ط±.ط³</span></div>' +
+            '<span class="v num">' + F.money(T.opening) + ' ر.س</span></div>' +
         '</div>' +
       '</div>';
 
@@ -474,7 +474,7 @@
           T.countPendingOut + ' بانتظار السداد (' + F.money(T.pendingOut) + ' ر.س)</span></div>' +
         '<div class="pb-proj"><span class="k">الرصيد المتوقع بعد التسوية</span>' +
           '<span class="v num' + (T.projected < 0 ? ' neg' : '') + '">' +
-            F.money(T.projected) + ' ط±.ط³</span></div>' +
+            F.money(T.projected) + ' ر.س</span></div>' +
       '</div>' : '';
 
     /* --- حركة الفترة --- */
@@ -511,13 +511,13 @@
       '<div class="panel-body">' +
         '<div class="recon">' +
           '<div><span class="k">مسجّل في مسار التسويق</span>' +
-            '<span class="v num">' + F.money(mkt) + ' ط±.ط³</span></div>' +
+            '<span class="v num">' + F.money(mkt) + ' ر.س</span></div>' +
           '<div><span class="k">فواتير بتصنيف «تسويق»</span>' +
-            '<span class="v num">' + F.money(mktInv) + ' ط±.ط³</span></div>' +
+            '<span class="v num">' + F.money(mktInv) + ' ر.س</span></div>' +
           '<div><span class="k">الفرق</span>' +
             '<span class="v num" style="color:' +
               (Math.abs(diff) < 1 ? 'var(--green)' : 'var(--amber)') + '">' +
-              F.money(Math.abs(diff)) + ' ط±.ط³</span></div>' +
+              F.money(Math.abs(diff)) + ' ر.س</span></div>' +
         '</div>' +
         '<p class="hint" style="margin-top:12px">' +
           (Math.abs(diff) < 1
@@ -692,7 +692,7 @@
           '<span>الرصيد الحالي: <strong class="num">' + F.money(cur2) + ' ر.س</strong></span>' +
           (existing ? '' :
             '<span>الرصيد بعد الحفظ: <strong class="num" style="color:' +
-            (eff < 0 ? 'var(--red)' : 'var(--green)') + '">' + F.money(eff) + ' ط±.ط³</strong></span>') +
+            (eff < 0 ? 'var(--red)' : 'var(--green)') + '">' + F.money(eff) + ' ر.س</strong></span>') +
           (st === 'unpaid' ? '<span style="color:var(--amber)">فاتورة معلّقة — لن تؤثر على الرصيد حتى تُسدَّد</span>' : '') +
         '</div>';
     }
@@ -741,7 +741,7 @@
            '<button class="btn no-print" onclick="window.print()">' +
              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
              '<path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>' +
-             '<rect x="6" y="14" width="12" height="8"/></svg>ط·ط¨ط§ط¹ط©</button></div>' +
+             '<rect x="6" y="14" width="12" height="8"/></svg>طباعة</button></div>' +
            '<div class="panel mb"><div class="panel-head"><h3>الأداء الشهري</h3></div>' +
              '<div class="table-wrap"><table><thead><tr>' +
              '<th>الشهر</th><th>الصرف</th><th>الطلبات</th><th>المبيعات</th>' +
@@ -1372,6 +1372,9 @@
     $('#bootMsg').textContent = 'جارٍ تحميل بياناتك…';
     try {
       await S.sync();
+      // فتح شاشة محددة عند القدوم من بوابة المسارات (مثل marketing.html#invoices)
+      var wanted = (location.hash || '').replace('#', '');
+      if (wanted && VIEWS[wanted]) state.view = wanted;
       $('#bootScreen').hidden = true;
       $('#appRoot').hidden = false;
       render();

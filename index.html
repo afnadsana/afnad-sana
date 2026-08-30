@@ -3,168 +3,131 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>مسار التسويق وإدارة الإعلانات</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
-<link rel="stylesheet" href="assets/css/style.css">
+<title>بوابة الأنظمة الإدارية — أفناد سنا</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧭</text></svg>">
+<link rel="stylesheet" href="assets/css/hub.css">
 </head>
 <body>
 
-<!-- ======================= شاشة تسجيل الدخول ======================= -->
-<div class="auth-screen" id="authScreen" hidden>
-  <div class="auth-card">
-    <div class="auth-brand">
-      <div class="brand-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<main class="hub">
+
+  <header class="hub-head">
+    <div class="logo">
+      <span class="logo-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
           <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>
         </svg>
-      </div>
-      <h1>مسار التسويق وإدارة الإعلانات</h1>
-      <p>سجّل الدخول للوصول إلى بيانات منشأتك</p>
+      </span>
+      <span class="logo-text">مسار<b>هَب</b></span>
     </div>
+    <p class="hub-sub">بوابة الأنظمة الإدارية</p>
+    <div class="hub-domain"><i class="dot-live"></i>أفناد سنا</div>
+  </header>
 
-    <div class="auth-tabs">
-      <button class="auth-tab active" data-auth-tab="signin">تسجيل الدخول</button>
-      <button class="auth-tab" data-auth-tab="signup">حساب جديد</button>
-    </div>
+  <section class="tracks" aria-label="المسارات">
 
-    <form class="auth-form" id="authForm" autocomplete="on">
-      <div class="field">
-        <label for="authEmail">البريد الإلكتروني</label>
-        <input type="email" id="authEmail" required autocomplete="username"
-               placeholder="name@company.com" dir="ltr">
-      </div>
-      <div class="field">
-        <label for="authPass">كلمة المرور</label>
-        <input type="password" id="authPass" required minlength="6"
-               autocomplete="current-password" placeholder="••••••••" dir="ltr">
-        <span class="hint" id="passHint">٦ أحرف على الأقل</span>
-      </div>
-      <div class="auth-msg" id="authMsg" hidden></div>
-      <button type="submit" class="btn btn-primary auth-submit" id="authSubmit">تسجيل الدخول</button>
-    </form>
-
-    <p class="auth-foot">
-      بياناتك محفوظة في قاعدة بيانات مشتركة ومحميّة — يراها أعضاء منشأتك فقط.
-    </p>
-  </div>
-</div>
-
-<!-- شاشة التحميل -->
-<div class="boot-screen" id="bootScreen">
-  <div class="boot-spin"></div>
-  <p id="bootMsg">جارٍ التحميل…</p>
-</div>
-
-<div class="app" id="appRoot" hidden>
-
-  <!-- ======================= الشريط الجانبي ======================= -->
-  <aside class="sidebar" id="sidebar">
-    <div class="brand">
-      <div class="brand-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>
+    <!-- التسويق — جاهز -->
+    <a class="track ready" href="marketing.html">
+      <div class="track-ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
         </svg>
       </div>
-      <div class="brand-text">
-        <h1>مسار التسويق وإدارة الإعلانات</h1>
-        <span>منصات مخصصة</span>
+      <h2>مسار التسويق</h2>
+      <p>إدارة الحملات والقنوات<br>تحليل الأداء والعائد الإعلاني</p>
+      <div class="track-foot">
+        <span class="go" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+        </span>
+        <span class="badge on">متاح</span>
+      </div>
+    </a>
+
+    <!-- المالية — ضمن مسار التسويق حالياً -->
+    <a class="track ready" href="marketing.html#invoices">
+      <div class="track-ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <path d="M14 2v6h6M9 13h6M9 17h4"/>
+        </svg>
+      </div>
+      <h2>مسار المالية</h2>
+      <p>الفواتير والحساب البنكي<br>الوارد والمنصرف والرصيد</p>
+      <div class="track-foot">
+        <span class="go" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+        </span>
+        <span class="badge on">متاح</span>
+      </div>
+    </a>
+
+    <!-- المشتريات -->
+    <div class="track soon" role="group" aria-label="مسار المشتريات — قيد التطوير">
+      <div class="track-ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+          <path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/>
+        </svg>
+      </div>
+      <h2>مسار المشتريات</h2>
+      <p>الطلبات والموردين<br>الشحن والتكاليف التشغيلية</p>
+      <div class="track-foot">
+        <span class="badge off">قيد التطوير</span>
       </div>
     </div>
 
-    <nav class="nav" id="nav">
-      <a class="nav-item active" data-view="dashboard">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-        <span>لوحة الإدارة الرئيسية</span>
-      </a>
-      <a class="nav-item" data-view="entries">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>
-        <span>الإدخالات اليومية والمتابعة</span>
-      </a>
-      <a class="nav-item" data-view="invoices">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 2v20l2.5-2 2.5 2 2.5-2 2.5 2 2.5-2 2.5 2V2l-2.5 2L14 2l-2.5 2L9 2 6.5 4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
-        <span>الفواتير والحسابات</span>
-      </a>
-      <a class="nav-item" data-view="monthly">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>
-        <span>التقرير الشهري</span>
-      </a>
-      <a class="nav-item" data-view="channels">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-        <span>القنوات والمنصات</span>
-      </a>
-      <a class="nav-item" data-view="entities">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg>
-        <span>المنشآت</span>
-      </a>
-      <a class="nav-item" data-view="team">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span>الفريق والصلاحيات</span>
-      </a>
-      <a class="nav-item" data-view="log">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-        <span>سجل التعديلات</span>
-      </a>
-      <a class="nav-item" data-view="settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        <span>الإعدادات والنسخ الاحتياطي</span>
-      </a>
-    </nav>
-
-    <div class="sidebar-foot">
-      <span class="muted-sm">مسجل الدخول باسم</span>
-      <strong id="currentUser">مدير النظام</strong>
-    </div>
-  </aside>
-
-  <!-- ======================= المحتوى ======================= -->
-  <main class="main">
-
-    <header class="topbar">
-      <div class="topbar-right">
-        <button class="icon-btn only-mobile" id="menuBtn" aria-label="القائمة">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
-        </button>
-        <div class="select-wrap">
-          <svg class="sel-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-          <select id="entityFilter"><option value="all">كل المنشآت</option></select>
-        </div>
+    <!-- المخزون -->
+    <div class="track soon" role="group" aria-label="مسار المخزون — قيد التطوير">
+      <div class="track-ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="8" width="18" height="13" rx="2"/>
+          <path d="M3 8V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2M10 12h4"/>
+        </svg>
       </div>
-      <div class="topbar-left">
-        <button class="ghost-btn" id="logoutBtn">
-          تسجيل الخروج
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg>
-        </button>
+      <h2>مسار المخزون</h2>
+      <p>تتبع الكميات والمستودعات<br>إشعارات النفاد وتقارير الحركة</p>
+      <div class="track-foot">
+        <span class="badge off">قيد التطوير</span>
       </div>
-    </header>
-
-    <div class="view-host" id="viewHost"></div>
-
-  </main>
-</div>
-
-<div class="backdrop" id="backdrop"></div>
-
-<!-- نافذة منبثقة عامة -->
-<div class="modal-root" id="modalRoot" aria-hidden="true">
-  <div class="modal-overlay" data-close></div>
-  <div class="modal" role="dialog" aria-modal="true">
-    <div class="modal-head">
-      <h3 id="modalTitle">عنوان</h3>
-      <button class="icon-btn" data-close aria-label="إغلاق">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
     </div>
-    <div class="modal-body" id="modalBody"></div>
-    <div class="modal-foot" id="modalFoot"></div>
-  </div>
-</div>
 
-<div class="toast-host" id="toastHost"></div>
+    <!-- العمليات -->
+    <div class="track soon" role="group" aria-label="مسار العمليات — قيد التطوير">
+      <div class="track-ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/>
+          <path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>
+        </svg>
+      </div>
+      <h2>مسار العمليات</h2>
+      <p>إدارة الشحنات وتذاكر الدعم<br>متابعة الطلبات والتسليم</p>
+      <div class="track-foot">
+        <span class="badge off">قيد التطوير</span>
+      </div>
+    </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="assets/js/config.js"></script>
-<script src="assets/js/store.js"></script>
-<script src="assets/js/charts.js"></script>
-<script src="assets/js/app.js"></script>
+    <!-- مسار جديد -->
+    <div class="track new" role="group" aria-label="مسار جديد قيد التطوير">
+      <span class="plus" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+      </span>
+      <h2>مسار جديد</h2>
+      <p>قيد التطوير</p>
+    </div>
+
+  </section>
+
+  <footer class="hub-foot">
+    <p>المسارات قيد التطوير غير مفعّلة بعد — مسار التسويق والمالية جاهزان للاستخدام.</p>
+  </footer>
+
+</main>
+
 </body>
 </html>
