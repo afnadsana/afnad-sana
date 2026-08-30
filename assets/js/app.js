@@ -16,7 +16,8 @@
     from: null,
     to: null,
     invDir: 'all',      // تصفية الفواتير: الكل / وارد / صادر
-    invStatus: 'all'    // تصفية الفواتير: الكل / مسدّدة / معلّقة
+    invStatus: 'all',   // تصفية الفواتير: الكل / مسدّدة / معلّقة
+    taxYear: S.todayISO().slice(0, 4)
   };
 
   /* ---------- حساب الفترة ---------- */
@@ -477,6 +478,28 @@
             F.money(T.projected) + ' ر.س</span></div>' +
       '</div>' : '';
 
+    /* --- شريط الوضع الضريبي (يظهر بعد التسجيل فقط) --- */
+    var vatBar = '';
+    if (S.db.settings.vatRegistrationDate) {
+      var today = S.todayISO();
+      var yr = today.slice(0, 4);
+      var q = S.quarterOf(today);
+      var qRange = S.vatByQuarter(yr, state.entityId)[q - 1];
+      vatBar =
+        '<div class="vat-bar">' +
+          '<div class="vb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+            '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg></div>' +
+          '<div class="vb-txt"><strong>الربع الضريبي الحالي (' + yr + ' — الربع ' + q + ')</strong>' +
+            '<span>مخرجات ' + F.money(qRange.outputVat) + ' ر.س · مدخلات ' + F.money(qRange.inputVat) +
+            ' ر.س</span></div>' +
+          '<div class="vb-net"><span class="k">' +
+            (qRange.netVat >= 0 ? 'صافي مستحق' : 'صافي قابل للاسترداد') + '</span>' +
+            '<span class="v num' + (qRange.netVat > 0 ? ' neg' : '') + '">' +
+            F.money(Math.abs(qRange.netVat)) + ' ر.س</span></div>' +
+          '<a class="btn btn-sm" href="#" data-goto-tax>التقرير الضريبي الكامل</a>' +
+        '</div>';
+    }
+
     /* --- حركة الفترة --- */
     var period =
       '<div class="grid grid-3 mb">' +
@@ -539,7 +562,11 @@
         '<td>' + F.esc(v.party || '—') + '</td>' +
         '<td>' + F.esc(v.category) + '</td>' +
         '<td class="num" style="font-weight:800;color:' + (isIn ? 'var(--green)' : 'var(--red)') + '">' +
-          (isIn ? '+ ' : 'âˆ’ ') + F.money(v.amount) + '</td>' +
+          (isIn ? '+ ' : '− ') + F.money(v.amount) + '</td>' +
+        '<td class="num">' + (v.vatAmount > 0
+          ? F.money(v.vatAmount) + '<span class="hint" style="display:block">' +
+            F.pct(v.vatRate * 100, 0) + '</span>'
+          : '<span style="color:var(--muted)">—</span>') + '</td>' +
         '<td>' + F.esc(v.method) + '</td>' +
         '<td><span class="tag" style="background:' +
           (v.status === 'paid' ? 'var(--green-bg)' : '#fff4e0') + ';color:' +
@@ -573,7 +600,7 @@
                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
                '<path d="M12 5v14M5 12h14"/></svg>فاتورة جديدة</button>' +
            '</div></div>' +
-           hero + pending +
+           hero + pending + vatBar +
            filterbarHTML() +
            period +
            '<div class="grid grid-2 mb">' +
@@ -586,10 +613,10 @@
              '<div style="display:flex;gap:6px;flex-wrap:wrap">' + dirChips + stChips + '</div>' +
            '</div><div class="table-wrap"><table><thead><tr>' +
              '<th>التاريخ</th><th>النوع</th><th>رقم الفاتورة</th><th>الجهة</th><th>التصنيف</th>' +
-             '<th>المبلغ</th><th>طريقة الدفع</th><th>الحالة</th><th>ملاحظات</th><th></th>' +
+             '<th>المبلغ</th><th>الضريبة</th><th>طريقة الدفع</th><th>الحالة</th><th>ملاحظات</th><th></th>' +
            '</tr></thead><tbody>' +
            (list.length ? rows :
-             '<tr><td colspan="10"><div class="empty">' +
+             '<tr><td colspan="11"><div class="empty">' +
                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">' +
                '<path d="M4 2v20l2.5-2 2.5 2 2.5-2 2.5 2 2.5-2 2.5 2V2l-2.5 2L14 2l-2.5 2L9 2 6.5 4z"/></svg>' +
                '<h4>لا توجد فواتير</h4><p>سجّل أول مبلغ وارد أو صادر.</p>' +
@@ -602,8 +629,11 @@
     var v = existing || {
       date: S.todayISO(), dir: 'out', amount: '', party: '', invoiceNo: '',
       category: 'أخرى', method: S.METHODS[0], status: 'paid',
-      entityId: state.entityId !== 'all' ? state.entityId : S.db.entities[0].id, note: ''
+      entityId: state.entityId !== 'all' ? state.entityId : S.db.entities[0].id, note: '',
+      vatRate: S.db.settings.defaultVatRate, vatAmount: 0
     };
+    var taxableDefault = existing ? v.vatAmount > 0 : S.isVatRegisteredOn(v.date);
+    var rateDefault = (v.vatRate || S.db.settings.defaultVatRate || 0.15) * 100;
 
     function catOptions(dir, cur) {
       var arr = dir === 'in' ? S.CAT_IN : S.CAT_OUT;
@@ -644,6 +674,17 @@
           '</select></div>' +
         '<div class="field full"><label>ملاحظات</label>' +
           '<textarea id="v_note" rows="2" placeholder="اختياري">' + F.esc(v.note) + '</textarea></div>' +
+        '<div class="field full"><label>ضريبة القيمة المضافة</label>' +
+          '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">' +
+            '<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer">' +
+              '<input type="checkbox" id="v_taxable"' + (taxableDefault ? ' checked' : '') + '>' +
+              'فاتورة خاضعة للضريبة</label>' +
+            '<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)">النسبة' +
+              '<input type="number" id="v_vatrate" min="0" max="100" step="0.1" value="' +
+              rateDefault.toFixed(1) + '" style="width:78px" ' + (!taxableDefault ? 'disabled' : '') + '>%</label>' +
+          '</div>' +
+          '<span class="hint">المبلغ أعلاه شامل الضريبة — يُحسب المبلغ قبل الضريبة تلقائياً</span>' +
+        '</div>' +
         '<div class="field full" id="v_preview" style="background:var(--bg);padding:12px;border-radius:10px"></div>' +
       '</div>';
 
@@ -651,6 +692,9 @@
       '<button class="btn btn-primary" id="modalSave">حفظ</button>' +
       '<button class="btn" data-close>إلغاء</button>',
       function () {
+        var taxable = $('#v_taxable').checked;
+        var rate = taxable ? (parseFloat($('#v_vatrate').value) || 0) / 100 : 0;
+        var amount = parseFloat($('#v_amount').value) || 0;
         var rec = {
           date: $('#v_date').value,
           dir: ($('input[name=invdir]:checked') || {}).value || 'out',
@@ -661,7 +705,9 @@
           method: $('#v_method').value,
           entityId: $('#v_entity').value,
           status: $('#v_status').value,
-          note: $('#v_note').value
+          note: $('#v_note').value,
+          vatRate: rate,
+          vatAmount: taxable ? S.vatFromInclusive(amount, rate) : 0
         };
         if (!rec.date) { toast('التاريخ مطلوب', true); return; }
         if (!(parseFloat(rec.amount) > 0)) { toast('أدخل مبلغاً أكبر من صفر', true); return; }
@@ -672,7 +718,8 @@
       });
 
     // تحديث التصنيفات والمعاينة عند تغيير النوع
-    function refresh() {
+    var userTouchedTaxable = false;
+    function refresh(e) {
       var dir = ($('input[name=invdir]:checked') || {}).value || 'out';
       var cur = $('#v_cat').value;
       $('#v_cat').innerHTML = catOptions(dir, cur);
@@ -681,7 +728,20 @@
         l.className = 'seg-opt' + (on ? ' on ' + l.querySelector('input').value : '');
       });
 
+      // عند تغيير التاريخ (لفاتورة جديدة فقط) نحدّث افتراضياً حسب تاريخ التسجيل الضريبي
+      if (!existing && e && e.target && e.target.id === 'v_date' && !userTouchedTaxable) {
+        $('#v_taxable').checked = S.isVatRegisteredOn($('#v_date').value);
+      }
+      if (e && e.target && e.target.id === 'v_taxable') userTouchedTaxable = true;
+
+      var taxable = $('#v_taxable').checked;
+      $('#v_vatrate').disabled = !taxable;
+
       var amt = parseFloat($('#v_amount').value) || 0;
+      var rate = (parseFloat($('#v_vatrate').value) || 0) / 100;
+      var vat = taxable ? S.vatFromInclusive(amt, rate) : 0;
+      var pretax = amt - vat;
+
       var st = $('#v_status').value;
       var cur2 = S.treasury(null, null, 'all').balance;
       var eff = existing
@@ -693,11 +753,14 @@
           (existing ? '' :
             '<span>الرصيد بعد الحفظ: <strong class="num" style="color:' +
             (eff < 0 ? 'var(--red)' : 'var(--green)') + '">' + F.money(eff) + ' ر.س</strong></span>') +
+          (taxable ? '<span>قبل الضريبة: <strong class="num">' + F.money(pretax) + ' ر.س</strong></span>' +
+            '<span>الضريبة: <strong class="num">' + F.money(vat) + ' ر.س</strong></span>' : '') +
           (st === 'unpaid' ? '<span style="color:var(--amber)">فاتورة معلّقة — لن تؤثر على الرصيد حتى تُسدَّد</span>' : '') +
         '</div>';
     }
     $('#modalBody').addEventListener('change', refresh);
     $('#v_amount').addEventListener('input', refresh);
+    $('#v_vatrate').addEventListener('input', refresh);
     refresh();
   }
 
@@ -985,7 +1048,106 @@
           '</div>' +
           '<button class="btn btn-danger" id="logoutBtn2" style="margin-top:14px">تسجيل الخروج</button>' +
         '</div></div>' +
+        '<div class="panel"><div class="panel-head"><h3>ضريبة القيمة المضافة</h3></div><div class="panel-body">' +
+          '<div class="field" style="margin-bottom:12px"><label>تاريخ التسجيل الضريبي</label>' +
+            '<input type="date" id="setVatDate" value="' + (s.vatRegistrationDate || '') + '">' +
+            '<span class="hint">من هذا التاريخ فأحدث تُحتسب الضريبة افتراضياً على الفواتير الجديدة</span></div>' +
+          '<div class="field"><label>نسبة الضريبة الافتراضية (%)</label>' +
+            '<input type="number" id="setVatRate" min="0" max="100" step="0.1" value="' +
+            ((s.defaultVatRate || 0.15) * 100).toFixed(1) + '"></div>' +
+          '<button class="btn btn-primary" id="saveVat" style="margin-top:12px">حفظ</button>' +
+        '</div></div>' +
       '</div>';
+  }
+
+  /* ============================================================
+     التقرير الضريبي (ضريبة القيمة المضافة)
+     ============================================================ */
+  function viewTaxReport() {
+    var s = S.db.settings;
+    if (!s.vatRegistrationDate) {
+      return '<div class="page-head"><div><h2>التقرير الضريبي</h2>' +
+               '<p>ضريبة القيمة المضافة — المخرجات والمدخلات وصافي الضريبة</p></div></div>' +
+             '<div class="panel"><div class="panel-body">' +
+               '<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">' +
+                 '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>' +
+                 '<h4>لم يُضبط تاريخ التسجيل الضريبي</h4>' +
+                 '<p>حدّد تاريخ تسجيل منشأتك في ضريبة القيمة المضافة من الإعدادات لتفعيل هذا التقرير.</p>' +
+                 '<button class="btn btn-primary" data-goto-settings>الذهاب للإعدادات</button>' +
+               '</div></div></div>';
+    }
+
+    var years = S.invoiceYears();
+    if (years.indexOf(state.taxYear) < 0) state.taxYear = years[years.length - 1];
+    var year = state.taxYear;
+
+    var quarters = S.vatByQuarter(year, state.entityId);
+    var months = S.vatByMonth(year, state.entityId);
+    var curQ = S.quarterOf(S.todayISO());
+    var curYear = S.todayISO().slice(0, 4);
+
+    var yearChips = years.map(function (y) {
+      return '<button class="chip' + (y === year ? ' active' : '') + '" data-tax-year="' + y + '">' + y + '</button>';
+    }).join('');
+
+    var qCards = quarters.map(function (q) {
+      var isCurrent = (year === curYear && q.quarter === curQ);
+      var payable = q.netVat > 0;
+      return '<div class="q-card' + (isCurrent ? ' current' : '') + '">' +
+        '<div class="q-top"><span class="q-name">الربع ' + q.quarter + '</span>' +
+          (isCurrent ? '<span class="badge on">الحالي</span>' : '') + '</div>' +
+        '<div class="q-range">' + F.arDate(q.from) + ' — ' + F.arDate(q.to) + '</div>' +
+        '<div class="q-rows">' +
+          '<div class="q-row"><span class="lbl">ضريبة المخرجات (وارد)</span>' +
+            '<span class="val num">' + F.money(q.outputVat) + '</span></div>' +
+          '<div class="q-row"><span class="lbl">ضريبة المدخلات (صادر)</span>' +
+            '<span class="val num">' + F.money(q.inputVat) + '</span></div>' +
+        '</div>' +
+        '<div class="q-net' + (payable ? ' payable' : q.netVat < 0 ? ' refund' : '') + '">' +
+          '<span class="lbl">' + (payable ? 'صافي مستحق السداد' : q.netVat < 0 ? 'صافي قابل للاسترداد' : 'لا يوجد فرق') + '</span>' +
+          '<span class="val num">' + F.money(Math.abs(q.netVat)) + ' ر.س</span>' +
+        '</div></div>';
+    }).join('');
+
+    var yearTotal = quarters.reduce(function (a, q) {
+      a.outputVat += q.outputVat; a.inputVat += q.inputVat; a.netVat += q.netVat; return a;
+    }, { outputVat: 0, inputVat: 0, netVat: 0 });
+
+    var monthRows = months.map(function (m) {
+      if (!m.outputVat && !m.inputVat) return '';
+      return '<tr>' +
+        '<td>' + F.MONTHS[m.month - 1] + '</td>' +
+        '<td class="num">' + F.money(m.outputVat) + '</td>' +
+        '<td class="num">' + F.money(m.inputVat) + '</td>' +
+        '<td class="num" style="font-weight:700;color:' + (m.netVat > 0 ? 'var(--red)' : 'var(--green)') + '">' +
+          F.money(m.netVat) + '</td>' +
+      '</tr>';
+    }).join('');
+    var hasMonthly = months.some(function (m) { return m.outputVat || m.inputVat; });
+
+    return '<div class="page-head"><div>' +
+             '<h2>التقرير الضريبي</h2>' +
+             '<p>مسجَّل في ضريبة القيمة المضافة منذ ' + F.arDate(s.vatRegistrationDate) +
+               ' — نسبة ' + F.pct((s.defaultVatRate || 0.15) * 100, 0) + '</p>' +
+           '</div></div>' +
+           '<div class="filterbar"><span class="hint" style="margin-inline-end:6px">السنة</span>' + yearChips + '</div>' +
+           '<div class="grid grid-4 mb">' + qCards + '</div>' +
+           '<div class="panel mb"><div class="panel-head"><h3>إجمالي السنة ' + year + '</h3></div>' +
+             '<div class="panel-body"><div class="recon">' +
+               '<div><span class="k">إجمالي ضريبة المخرجات</span><span class="v num">' +
+                 F.money(yearTotal.outputVat) + ' ر.س</span></div>' +
+               '<div><span class="k">إجمالي ضريبة المدخلات</span><span class="v num">' +
+                 F.money(yearTotal.inputVat) + ' ر.س</span></div>' +
+               '<div><span class="k">صافي الضريبة</span><span class="v num" style="color:' +
+                 (yearTotal.netVat > 0 ? 'var(--red)' : 'var(--green)') + '">' +
+                 F.money(yearTotal.netVat) + ' ر.س</span></div>' +
+             '</div></div></div>' +
+           '<div class="panel"><div class="panel-head"><h3>التفصيل الشهري</h3></div>' +
+             '<div class="table-wrap"><table><thead><tr>' +
+               '<th>الشهر</th><th>ضريبة المخرجات</th><th>ضريبة المدخلات</th><th>صافي الضريبة</th>' +
+             '</tr></thead><tbody>' +
+             (hasMonthly ? monthRows : '<tr><td colspan="4">' + C.empty('لا توجد فواتير خاضعة للضريبة في هذه السنة') + '</td></tr>') +
+             '</tbody></table></div></div>';
   }
 
   /* ============================================================
@@ -994,7 +1156,7 @@
   var VIEWS = {
     dashboard: viewDashboard, entries: viewEntries, invoices: viewInvoices,
     monthly: viewMonthly, channels: viewChannels, entities: viewEntities,
-    team: viewTeam, log: viewLog, settings: viewSettings
+    team: viewTeam, tax: viewTaxReport, log: viewLog, settings: viewSettings
   };
 
   function render() {
@@ -1291,6 +1453,24 @@
       var b = $('#setBank').value, o = $('#setOpening').value;
       run(function () { return S.saveSettings(o, b); }, 'تم الحفظ');
       return;
+    }
+    if (t.closest('#saveVat')) {
+      var vd = $('#setVatDate').value || null;
+      var vr = (parseFloat($('#setVatRate').value) || 0) / 100;
+      run(function () {
+        return S.saveSettings(S.db.settings.openingBalance, S.db.settings.bankName, vd, vr);
+      }, 'تم حفظ إعدادات الضريبة');
+      return;
+    }
+
+    /* ---------- التقرير الضريبي ---------- */
+    var ty = t.closest('[data-tax-year]');
+    if (ty) { state.taxYear = ty.dataset.taxYear; render(); return; }
+    if (t.closest('[data-goto-tax]')) {
+      e.preventDefault(); state.view = 'tax'; render(); return;
+    }
+    if (t.closest('[data-goto-settings]')) {
+      state.view = 'settings'; render(); return;
     }
   });
 

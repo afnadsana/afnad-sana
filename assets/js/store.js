@@ -43,7 +43,9 @@
     return {
       user: '', orgName: '', role: 'member',
       entities: [], channels: [], entries: [], invoices: [],
-      members: [], settings: { openingBalance: 0, bankName: '' }, log: []
+      members: [],
+      settings: { openingBalance: 0, bankName: '', vatRegistrationDate: null, defaultVatRate: 0.15 },
+      log: []
     };
   }
 
@@ -59,7 +61,8 @@
     return {
       id: r.id, date: r.date, dir: r.dir, amount: num(r.amount),
       party: r.party || '', invoiceNo: r.invoice_no || '', category: r.category,
-      method: r.method, status: r.status, entityId: r.entity_id, note: r.note || ''
+      method: r.method, status: r.status, entityId: r.entity_id, note: r.note || '',
+      vatRate: num(r.vat_rate), vatAmount: num(r.vat_amount)
     };
   }
 
@@ -155,8 +158,10 @@
     out.entries  = q[3].data.map(mapEntry);
     out.invoices = q[4].data.map(mapInvoice);
     out.settings = q[5].data
-      ? { openingBalance: num(q[5].data.opening_balance), bankName: q[5].data.bank_name || '' }
-      : { openingBalance: 0, bankName: '' };
+      ? { openingBalance: num(q[5].data.opening_balance), bankName: q[5].data.bank_name || '',
+          vatRegistrationDate: q[5].data.vat_registration_date || null,
+          defaultVatRate: q[5].data.default_vat_rate != null ? Number(q[5].data.default_vat_rate) : 0.15 }
+      : { openingBalance: 0, bankName: '', vatRegistrationDate: null, defaultVatRate: 0.15 };
     out.log = q[6].data.map(function (r) {
       return { id: r.id, ts: r.created_at, user: r.user_email || '—',
                action: r.action, detail: r.detail || '' };
@@ -239,7 +244,8 @@
       party: (v.party || '').trim(), invoice_no: (v.invoiceNo || '').trim(),
       category: v.category || 'أخرى', method: v.method || METHODS[0],
       status: v.status === 'unpaid' ? 'unpaid' : 'paid',
-      note: (v.note || '').trim(), created_by: me.id
+      note: (v.note || '').trim(), created_by: me.id,
+      vat_rate: num(v.vatRate), vat_amount: num(v.vatAmount)
     };
     var r = await client().from('invoices').insert(row).select().single();
     if (r.error) throw new Error(r.error.message);
@@ -263,6 +269,8 @@
     if (patch.method    !== undefined) row.method     = patch.method;
     if (patch.status    !== undefined) row.status     = patch.status;
     if (patch.note      !== undefined) row.note       = (patch.note || '').trim();
+    if (patch.vatRate   !== undefined) row.vat_rate   = num(patch.vatRate);
+    if (patch.vatAmount !== undefined) row.vat_amount = num(patch.vatAmount);
 
     var r = await client().from('invoices').update(row).eq('id', id).select().single();
     if (r.error) throw new Error(r.error.message);
@@ -377,23 +385,42 @@
   }
 
   /* ---------- الإعدادات ---------- */
-  async function saveSettings(openingBalance, bankName) {
+  async function saveSettings(openingBalance, bankName, vatRegistrationDate, defaultVatRate) {
     requireWrite();
     var old = db.settings.openingBalance;
-    var r = await client().from('settings').upsert({
+    var payload = {
       org_id: orgId, opening_balance: num(openingBalance),
       bank_name: (bankName || '').trim(), updated_at: new Date().toISOString()
-    }).select().single();
+    };
+    if (vatRegistrationDate !== undefined) payload.vat_registration_date = vatRegistrationDate || null;
+    if (defaultVatRate !== undefined) payload.default_vat_rate = num(defaultVatRate);
+
+    var r = await client().from('settings').upsert(payload).select().single();
     if (r.error) throw new Error(r.error.message);
     db.settings = {
       openingBalance: num(r.data.opening_balance),
-      bankName: r.data.bank_name || ''
+      bankName: r.data.bank_name || '',
+      vatRegistrationDate: r.data.vat_registration_date || null,
+      defaultVatRate: r.data.default_vat_rate != null ? Number(r.data.default_vat_rate) : 0.15
     };
     if (num(openingBalance) !== old) {
       await log('تعديل', 'الرصيد الافتتاحي: ' + old.toFixed(2) + ' ← ' +
                 num(openingBalance).toFixed(2) + ' ر.س');
     }
     return db.settings;
+  }
+
+  /** هل التاريخ المعطى يقع بعد تسجيل المنشأة في ضريبة القيمة المضافة؟ */
+  function isVatRegisteredOn(dateISO) {
+    var reg = db.settings.vatRegistrationDate;
+    return !!reg && !!dateISO && dateISO >= reg;
+  }
+
+  /** يحسب الضريبة (طرح) من مبلغ شامل الضريبة بنسبة معيّنة */
+  function vatFromInclusive(totalAmount, rate) {
+    rate = num(rate);
+    if (rate <= 0) return 0;
+    return Math.round((totalAmount - totalAmount / (1 + rate)) * 100) / 100;
   }
 
   /* ============================================================
@@ -516,6 +543,62 @@
     return t;
   }
 
+  /* ============================================================
+     الضريبة (ضريبة القيمة المضافة)
+     ضريبة المخرجات: على الوارد (المبيعات) — دائنة على المنشأة لصالح الزكاة والدخل
+     ضريبة المدخلات: على الصادر (المشتريات) — تُخصم من ضريبة المخرجات
+     صافي الضريبة = المخرجات − المدخلات (موجب = مستحق سداد، سالب = قابل للاسترداد)
+     تُحسب فقط على الفواتير المسدّدة (أساس نقدي، يطابق دفتر الحساب البنكي)
+     ============================================================ */
+  function vatSummary(from, to, entityId) {
+    var list = queryInvoices(from, to, entityId, 'all', 'paid');
+    var t = { outputBase: 0, outputVat: 0, inputBase: 0, inputVat: 0 };
+    list.forEach(function (v) {
+      var vat = num(v.vatAmount), base = v.amount - vat;
+      if (v.dir === 'in') { t.outputBase += base; t.outputVat += vat; }
+      else                { t.inputBase += base; t.inputVat += vat; }
+    });
+    t.netVat = Math.round((t.outputVat - t.inputVat) * 100) / 100;
+    return t;
+  }
+
+  function quarterOf(dateISO) { return Math.floor((parseInt(dateISO.slice(5, 7), 10) - 1) / 3) + 1; }
+
+  function vatByQuarter(year, entityId) {
+    var out = [];
+    for (var q = 1; q <= 4; q++) {
+      var from = year + '-' + String((q - 1) * 3 + 1).padStart(2, '0') + '-01';
+      var toMonth = q * 3;
+      var toDate = new Date(year, toMonth, 0);
+      var to = year + '-' + String(toMonth).padStart(2, '0') + '-' + String(toDate.getDate()).padStart(2, '0');
+      var s = vatSummary(from, to, entityId);
+      s.quarter = q; s.year = year; s.from = from; s.to = to;
+      out.push(s);
+    }
+    return out;
+  }
+
+  function vatByMonth(year, entityId) {
+    var out = [];
+    for (var m = 1; m <= 12; m++) {
+      var from = year + '-' + String(m).padStart(2, '0') + '-01';
+      var toDate = new Date(year, m, 0);
+      var to = year + '-' + String(m).padStart(2, '0') + '-' + String(toDate.getDate()).padStart(2, '0');
+      var s = vatSummary(from, to, entityId);
+      s.month = m; s.year = year;
+      out.push(s);
+    }
+    return out;
+  }
+
+  /** كل السنوات التي فيها فواتير (لقائمة اختيار السنة) */
+  function invoiceYears() {
+    var set = {};
+    db.invoices.forEach(function (v) { set[v.date.slice(0, 4)] = true; });
+    var years = Object.keys(set).sort();
+    return years.length ? years : [String(new Date().getFullYear())];
+  }
+
   function invoicesByCategory(list) {
     var map = {};
     list.forEach(function (v) {
@@ -549,10 +632,11 @@
 
   function exportInvoicesCSV(list) {
     var head = ['التاريخ', 'النوع', 'رقم الفاتورة', 'الجهة', 'التصنيف',
-                'المبلغ', 'طريقة الدفع', 'الحالة', 'المنشأة', 'ملاحظات'];
+                'المبلغ شامل الضريبة', 'قبل الضريبة', 'الضريبة', 'طريقة الدفع', 'الحالة', 'المنشأة', 'ملاحظات'];
     var rows = list.map(function (v) {
       return [v.date, v.dir === 'in' ? 'وارد' : 'صادر', v.invoiceNo, v.party,
-              v.category, v.amount.toFixed(2), v.method,
+              v.category, v.amount.toFixed(2), (v.amount - num(v.vatAmount)).toFixed(2),
+              num(v.vatAmount).toFixed(2), v.method,
               v.status === 'paid' ? 'مسدّدة' : 'معلّقة',
               entityName(v.entityId), v.note];
     });
@@ -625,6 +709,9 @@
     query: query, totals: totals, byChannel: byChannel, byDay: byDay,
     byMonth: byMonth, byEntity: byEntity, previousRange: previousRange,
     queryInvoices: queryInvoices, treasury: treasury, invoicesByCategory: invoicesByCategory,
+    isVatRegisteredOn: isVatRegisteredOn, vatFromInclusive: vatFromInclusive,
+    vatSummary: vatSummary, vatByQuarter: vatByQuarter, vatByMonth: vatByMonth,
+    invoiceYears: invoiceYears, quarterOf: quarterOf,
 
     exportCSV: exportCSV, exportInvoicesCSV: exportInvoicesCSV, exportJSON: exportJSON
   };
