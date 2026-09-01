@@ -111,6 +111,8 @@ create table if not exists public.invoices (
   method      text not null default 'تحويل بنكي',
   status      text not null default 'paid' check (status in ('paid','unpaid')),
   note        text not null default '',
+  vat_rate    numeric(5,4) not null default 0,
+  vat_amount  numeric(14,2) not null default 0,
   created_by  uuid references auth.users(id) on delete set null,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
@@ -123,10 +125,12 @@ create index if not exists invoices_status_idx   on public.invoices(org_id, stat
 -- 5) الإعدادات (صف واحد لكل منظمة)
 -- ------------------------------------------------------------
 create table if not exists public.settings (
-  org_id           uuid primary key references public.orgs(id) on delete cascade,
-  opening_balance  numeric(14,2) not null default 0,
-  bank_name        text not null default '',
-  updated_at       timestamptz not null default now()
+  org_id                 uuid primary key references public.orgs(id) on delete cascade,
+  opening_balance        numeric(14,2) not null default 0,
+  bank_name              text not null default '',
+  vat_registration_date  date,
+  default_vat_rate       numeric(5,4) not null default 0.15,
+  updated_at             timestamptz not null default now()
 );
 
 -- ------------------------------------------------------------
@@ -281,6 +285,123 @@ begin
 
   return new_org;
 end $$;
+
+-- ============================================================
+--  10) دعوة الأعضاء
+--     المالك أو المدير فقط يدعو مستخدماً موجوداً مسبقاً (بريده مسجَّل بالفعل)
+--     إلى نفس المنظمة بصلاحية محددة.
+-- ============================================================
+create or replace function public.invite_member(target_email text, target_role text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare caller_org uuid; caller_role text; target_id uuid;
+begin
+  select m.org_id, m.role into caller_org, caller_role
+    from public.memberships m where m.user_id = auth.uid() limit 1;
+
+  if caller_org is null then
+    return jsonb_build_object('ok', false, 'reason', 'لست عضواً في أي منشأة');
+  end if;
+  if caller_role not in ('owner','admin') then
+    return jsonb_build_object('ok', false, 'reason', 'فقط المالك أو المدير يقدر يدعو أعضاء');
+  end if;
+  if target_role not in ('admin','member','viewer') then
+    return jsonb_build_object('ok', false, 'reason', 'صلاحية غير صحيحة');
+  end if;
+
+  select u.id into target_id from auth.users u
+    where lower(u.email) = lower(trim(target_email)) limit 1;
+
+  if target_id is null then
+    return jsonb_build_object('ok', false, 'reason',
+      'ما فيه حساب بهذا البريد. اطلب منه يفتح الرابط وينشئ حساب أولاً، ثم أعد المحاولة.');
+  end if;
+
+  if exists (select 1 from public.memberships m
+             where m.org_id = caller_org and m.user_id = target_id) then
+    return jsonb_build_object('ok', false, 'reason', 'هذا العضو مضاف مسبقاً');
+  end if;
+
+  insert into public.memberships (user_id, org_id, role)
+    values (target_id, caller_org, target_role);
+  return jsonb_build_object('ok', true);
+end $$;
+
+revoke all on function public.invite_member(text, text) from public, anon;
+grant execute on function public.invite_member(text, text) to authenticated;
+revoke all on function public.bootstrap_org(text) from public, anon;
+grant execute on function public.bootstrap_org(text) to authenticated;
+
+-- المالك أو المدير يقدر يزيل أي عضو غير نفسه
+drop policy if exists memberships_owner_delete on public.memberships;
+create policy memberships_owner_delete on public.memberships
+  for delete using (
+    user_id <> auth.uid()
+    and exists (select 1 from public.memberships m
+                where m.org_id = memberships.org_id
+                  and m.user_id = auth.uid()
+                  and m.role in ('owner','admin'))
+  );
+
+-- ============================================================
+--  11) العملاء والمستحقات الشهرية
+--     متابعة الجهات التي تدفع اشتراكاً/رسوماً شهرية متكررة:
+--     هل عقدها ساري؟ هل سدّدت شهرها الحالي؟ كم المتأخر عليها إجمالاً؟
+-- ============================================================
+create table if not exists public.clients (
+  id                uuid primary key default gen_random_uuid(),
+  org_id            uuid not null references public.orgs(id) on delete cascade,
+  entity_id         uuid references public.entities(id) on delete set null,
+  name              text not null,
+  contract_status   text not null default 'active' check (contract_status in ('active','ended','paused')),
+  contract_start    date,
+  contract_end      date,
+  monthly_amount    numeric(14,2) not null default 0 check (monthly_amount >= 0),
+  note              text not null default '',
+  created_by        uuid references auth.users(id) on delete set null,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+create index if not exists clients_org_idx on public.clients(org_id);
+
+-- مستحقات كل عميل لكل شهر (period = أول يوم من الشهر)
+create table if not exists public.client_dues (
+  id           uuid primary key default gen_random_uuid(),
+  org_id       uuid not null references public.orgs(id) on delete cascade,
+  client_id    uuid not null references public.clients(id) on delete cascade,
+  period       date not null,
+  amount_due   numeric(14,2) not null default 0 check (amount_due >= 0),
+  amount_paid  numeric(14,2) not null default 0 check (amount_paid >= 0),
+  paid_date    date,
+  note         text not null default '',
+  created_by   uuid references auth.users(id) on delete set null,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  unique (client_id, period)
+);
+create index if not exists client_dues_org_idx    on public.client_dues(org_id);
+create index if not exists client_dues_client_idx on public.client_dues(client_id, period desc);
+
+drop trigger if exists clients_touch on public.clients;
+create trigger clients_touch before update on public.clients
+  for each row execute function public.touch_updated_at();
+drop trigger if exists client_dues_touch on public.client_dues;
+create trigger client_dues_touch before update on public.client_dues
+  for each row execute function public.touch_updated_at();
+
+alter table public.clients     enable row level security;
+alter table public.client_dues enable row level security;
+
+drop policy if exists clients_select on public.clients;
+create policy clients_select on public.clients for select using (public.is_member(org_id));
+drop policy if exists clients_write on public.clients;
+create policy clients_write on public.clients for all
+  using (public.can_write(org_id)) with check (public.can_write(org_id));
+
+drop policy if exists client_dues_select on public.client_dues;
+create policy client_dues_select on public.client_dues for select using (public.is_member(org_id));
+drop policy if exists client_dues_write on public.client_dues;
+create policy client_dues_write on public.client_dues for all
+  using (public.can_write(org_id)) with check (public.can_write(org_id));
 
 -- ============================================================
 --  انتهى. بعد التشغيل تحقق أن كل الجداول تظهر RLS enabled

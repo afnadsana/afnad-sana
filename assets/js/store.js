@@ -43,6 +43,7 @@
     return {
       user: '', orgName: '', role: 'member',
       entities: [], channels: [], entries: [], invoices: [],
+      clients: [], clientDues: [],
       members: [],
       settings: { openingBalance: 0, bankName: '', vatRegistrationDate: null, defaultVatRate: 0.15 },
       log: []
@@ -63,6 +64,20 @@
       party: r.party || '', invoiceNo: r.invoice_no || '', category: r.category,
       method: r.method, status: r.status, entityId: r.entity_id, note: r.note || '',
       vatRate: num(r.vat_rate), vatAmount: num(r.vat_amount)
+    };
+  }
+  function mapClient(r) {
+    return {
+      id: r.id, entityId: r.entity_id, name: r.name,
+      contractStatus: r.contract_status, contractStart: r.contract_start, contractEnd: r.contract_end,
+      monthlyAmount: num(r.monthly_amount), note: r.note || ''
+    };
+  }
+  function mapDue(r) {
+    return {
+      id: r.id, clientId: r.client_id, period: r.period,
+      amountDue: num(r.amount_due), amountPaid: num(r.amount_paid),
+      paidDate: r.paid_date, note: r.note || ''
     };
   }
 
@@ -143,7 +158,9 @@
       c.from('invoices').select('*').eq('org_id', orgId).order('date', { ascending: false }),
       c.from('settings').select('*').eq('org_id', orgId).maybeSingle(),
       c.from('audit_log').select('*').eq('org_id', orgId).order('created_at', { ascending: false }).limit(300),
-      c.from('memberships').select('user_id, role').eq('org_id', orgId)
+      c.from('memberships').select('user_id, role').eq('org_id', orgId),
+      c.from('clients').select('*').eq('org_id', orgId).order('name'),
+      c.from('client_dues').select('*').eq('org_id', orgId).order('period', { ascending: false })
     ]);
 
     for (var i = 0; i < q.length; i++) {
@@ -169,6 +186,8 @@
     out.members = q[7].data.map(function (r) {
       return { userId: r.user_id, role: r.role, isMe: r.user_id === me.id };
     });
+    out.clients    = q[8].data.map(mapClient);
+    out.clientDues = q[9].data.map(mapDue);
 
     db = out;
     return db;
@@ -382,6 +401,146 @@
     db.entities = db.entities.filter(function (x) { return x.id !== id; });
     await log('حذف', 'منشأة: ' + nm);
     return { ok: true };
+  }
+
+  /* ============================================================
+     العملاء والمستحقات الشهرية (متابعة العقود المتكررة)
+     ============================================================ */
+  function currentPeriod() {
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01';
+  }
+  function periodOf(dateISO) { return dateISO.slice(0, 8) + '01'; }
+
+  async function addClient(c) {
+    requireWrite();
+    var row = {
+      org_id: orgId, entity_id: c.entityId || null, name: (c.name || '').trim(),
+      contract_status: c.contractStatus || 'active',
+      contract_start: c.contractStart || null, contract_end: c.contractEnd || null,
+      monthly_amount: num(c.monthlyAmount), note: (c.note || '').trim(), created_by: me.id
+    };
+    var r = await client().from('clients').insert(row).select().single();
+    if (r.error) throw new Error(r.error.message);
+    db.clients.push(mapClient(r.data));
+    db.clients.sort(function (a, b) { return a.name.localeCompare(b.name, 'ar'); });
+    await log('إضافة', 'عميل جديد: ' + row.name);
+    return r.data;
+  }
+
+  async function updateClient(id, patch) {
+    requireWrite();
+    var row = {};
+    if (patch.entityId       !== undefined) row.entity_id       = patch.entityId || null;
+    if (patch.name           !== undefined) row.name            = (patch.name || '').trim();
+    if (patch.contractStatus !== undefined) row.contract_status = patch.contractStatus;
+    if (patch.contractStart  !== undefined) row.contract_start  = patch.contractStart || null;
+    if (patch.contractEnd    !== undefined) row.contract_end    = patch.contractEnd || null;
+    if (patch.monthlyAmount  !== undefined) row.monthly_amount  = num(patch.monthlyAmount);
+    if (patch.note           !== undefined) row.note            = (patch.note || '').trim();
+
+    var r = await client().from('clients').update(row).eq('id', id).select().single();
+    if (r.error) throw new Error(r.error.message);
+    var i = db.clients.findIndex(function (x) { return x.id === id; });
+    if (i >= 0) db.clients[i] = mapClient(r.data);
+    await log('تعديل', 'عميل: ' + r.data.name);
+    return r.data;
+  }
+
+  async function deleteClient(id) {
+    requireWrite();
+    var c = db.clients.find(function (x) { return x.id === id; });
+    var r = await client().from('clients').delete().eq('id', id);
+    if (r.error) throw new Error(r.error.message);
+    db.clients = db.clients.filter(function (x) { return x.id !== id; });
+    db.clientDues = db.clientDues.filter(function (x) { return x.clientId !== id; });
+    if (c) await log('حذف', 'عميل: ' + c.name + ' (وكل مستحقاته)');
+    return true;
+  }
+
+  /** إضافة أو تحديث مستحق شهر معيّن لعميل (upsert بمفتاح عميل+شهر) */
+  async function saveDue(due) {
+    requireWrite();
+    var row = {
+      org_id: orgId, client_id: due.clientId, period: periodOf(due.period),
+      amount_due: num(due.amountDue), amount_paid: num(due.amountPaid),
+      paid_date: due.paidDate || null, note: (due.note || '').trim(), created_by: me.id
+    };
+    var r = await client().from('client_dues')
+              .upsert(row, { onConflict: 'client_id,period' }).select().single();
+    if (r.error) throw new Error(r.error.message);
+    var rec = mapDue(r.data);
+    var i = db.clientDues.findIndex(function (x) { return x.clientId === rec.clientId && x.period === rec.period; });
+    if (i >= 0) db.clientDues[i] = rec; else db.clientDues.unshift(rec);
+    var c = db.clients.find(function (x) { return x.id === rec.clientId; });
+    await log('تعديل', 'مستحق ' + (c ? c.name : '') + ' لشهر ' + rec.period.slice(0, 7) +
+              ' — مدفوع ' + rec.amountPaid.toFixed(2) + ' من ' + rec.amountDue.toFixed(2) + ' ر.س');
+    return rec;
+  }
+
+  async function deleteDue(id) {
+    requireWrite();
+    var r = await client().from('client_dues').delete().eq('id', id);
+    if (r.error) throw new Error(r.error.message);
+    db.clientDues = db.clientDues.filter(function (x) { return x.id !== id; });
+    return true;
+  }
+
+  /** يولّد مستحقات الشهر المحدد لكل العملاء النشطين الذين ليس لديهم مستحق بعد لهذا الشهر */
+  async function generateDuesForPeriod(period) {
+    requireWrite();
+    period = periodOf(period);
+    var active = db.clients.filter(function (c) {
+      if (c.contractStatus !== 'active') return false;
+      if (c.contractEnd && c.contractEnd < period) return false;
+      if (c.monthlyAmount <= 0) return false;
+      var has = db.clientDues.some(function (x) { return x.clientId === c.id && x.period === period; });
+      return !has;
+    });
+    var created = 0;
+    for (var i = 0; i < active.length; i++) {
+      await saveDue({ clientId: active[i].id, period: period, amountDue: active[i].monthlyAmount, amountPaid: 0 });
+      created++;
+    }
+    return created;
+  }
+
+  function clientDuesOf(clientId) {
+    return db.clientDues.filter(function (x) { return x.clientId === clientId; })
+             .sort(function (a, b) { return a.period < b.period ? 1 : -1; });
+  }
+
+  /** هل العقد ساري فعلياً؟ (يأخذ بعين الاعتبار انتهاء تاريخ العقد تلقائياً) */
+  function clientEffectiveStatus(c) {
+    if (c.contractStatus === 'ended') return 'ended';
+    if (c.contractStatus === 'paused') return 'paused';
+    if (c.contractEnd && c.contractEnd < todayISO()) return 'ended';
+    return 'active';
+  }
+
+  /** ملخص مالي لعميل: إجمالي مطلوب/مدفوع/متأخر، وحالة الشهر الحالي */
+  function clientSummary(c) {
+    var dues = clientDuesOf(c.id);
+    var cur = currentPeriod();
+    var totalDue = 0, totalPaid = 0, overdue = 0, overdueCount = 0;
+    var curDue = null;
+    dues.forEach(function (d) {
+      totalDue += d.amountDue; totalPaid += d.amountPaid;
+      if (d.period === cur) curDue = d;
+      if (d.period < cur && d.amountPaid < d.amountDue) {
+        overdue += (d.amountDue - d.amountPaid);
+        overdueCount++;
+      }
+    });
+    var curStatus = !curDue ? 'none'
+      : curDue.amountPaid >= curDue.amountDue ? 'paid'
+      : curDue.amountPaid > 0 ? 'partial' : 'unpaid';
+    return {
+      totalDue: totalDue, totalPaid: totalPaid,
+      overdue: Math.round(overdue * 100) / 100, overdueCount: overdueCount,
+      currentDue: curDue, currentStatus: curStatus,
+      effectiveStatus: clientEffectiveStatus(c)
+    };
   }
 
   /* ---------- الإعدادات ---------- */
@@ -704,6 +863,11 @@
     addEntity: addEntity, updateEntity: updateEntity, deleteEntity: deleteEntity,
     saveSettings: saveSettings,
     inviteMember: inviteMember, removeMember: removeMember,
+
+    addClient: addClient, updateClient: updateClient, deleteClient: deleteClient,
+    saveDue: saveDue, deleteDue: deleteDue, generateDuesForPeriod: generateDuesForPeriod,
+    clientDuesOf: clientDuesOf, clientSummary: clientSummary,
+    clientEffectiveStatus: clientEffectiveStatus, currentPeriod: currentPeriod,
 
     channel: channel, channelName: channelName, entityName: entityName,
     query: query, totals: totals, byChannel: byChannel, byDay: byDay,

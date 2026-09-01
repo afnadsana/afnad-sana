@@ -395,10 +395,9 @@
         if (!rec.date) { toast('التاريخ مطلوب', true); return; }
         if (!rec.cost && !rec.sales) { toast('أدخل الصرف أو المبيعات على الأقل', true); return; }
 
-        if (existing) { S.updateEntry(existing.id, rec); toast('تم تحديث الإدخال'); }
-        else { S.addEntry(rec); toast('تمت إضافة الإدخال'); }
         closeModal();
-        render();
+        if (existing) { run(function () { return S.updateEntry(existing.id, rec); }, 'تم تحديث الإدخال'); }
+        else { run(function () { return S.addEntry(rec); }, 'تمت إضافة الإدخال'); }
       });
 
     // معاينة حية للمؤشرات المحسوبة
@@ -712,9 +711,9 @@
         if (!rec.date) { toast('التاريخ مطلوب', true); return; }
         if (!(parseFloat(rec.amount) > 0)) { toast('أدخل مبلغاً أكبر من صفر', true); return; }
 
-        if (existing) { S.updateInvoice(existing.id, rec); toast('تم تحديث الفاتورة'); }
-        else { S.addInvoice(rec); toast('تمت إضافة الفاتورة'); }
-        closeModal(); render();
+        closeModal();
+        if (existing) { run(function () { return S.updateInvoice(existing.id, rec); }, 'تم تحديث الفاتورة'); }
+        else { run(function () { return S.addInvoice(rec); }, 'تمت إضافة الفاتورة'); }
       });
 
     // تحديث التصنيفات والمعاينة عند تغيير النوع
@@ -758,7 +757,7 @@
           (st === 'unpaid' ? '<span style="color:var(--amber)">فاتورة معلّقة — لن تؤثر على الرصيد حتى تُسدَّد</span>' : '') +
         '</div>';
     }
-    $('#modalBody').addEventListener('change', refresh);
+    $('#modalBody').onchange = refresh;
     $('#v_amount').addEventListener('input', refresh);
     $('#v_vatrate').addEventListener('input', refresh);
     refresh();
@@ -890,12 +889,15 @@
         if (!name) { toast('اسم القناة مطلوب', true); return; }
         var color = ($('input[name=chcolor]:checked') || {}).value || S.PALETTE[0];
         var ic = ($('input[name=chicon]:checked') || {}).value || 'dot';
-        if (existing) { S.updateChannel(existing.id, { name: name, color: color, icon: ic }); toast('تم التحديث'); }
-        else { S.addChannel(name, color, ic); toast('تمت الإضافة'); }
-        closeModal(); render();
+        closeModal();
+        if (existing) {
+          run(function () { return S.updateChannel(existing.id, { name: name, color: color, icon: ic }); }, 'تم التحديث');
+        } else {
+          run(function () { return S.addChannel(name, color, ic); }, 'تمت الإضافة');
+        }
       });
 
-    $('#modalBody').addEventListener('change', function (ev) {
+    $('#modalBody').onchange = function (ev) {
       if (ev.target.name === 'chcolor') {
         $$('.sw', $('#modalBody')).forEach(function (s) {
           s.style.borderColor = s.dataset.hex === ev.target.value ? '#1f2135' : 'transparent';
@@ -906,7 +908,7 @@
           s.style.borderColor = s.dataset.ic === ev.target.value ? 'var(--brand)' : 'var(--line)';
         });
       }
-    });
+    };
   }
 
   /* ============================================================
@@ -954,7 +956,7 @@
     }).join('');
 
     return '<div class="page-head"><div><h2>سجل التعديلات</h2>' +
-             '<p>كل إضافة أو تعديل أو حذف يُسجَّل هنا (آخر 500 عملية)</p></div></div>' +
+             '<p>كل إضافة أو تعديل أو حذف يُسجَّل هنا (آخر 300 عملية)</p></div></div>' +
            '<div class="panel"><div class="table-wrap"><table><thead><tr>' +
              '<th>التاريخ والوقت</th><th>العملية</th><th>التفاصيل</th><th>المستخدم</th>' +
            '</tr></thead><tbody>' +
@@ -1151,12 +1153,217 @@
   }
 
   /* ============================================================
+     متابعة العملاء (العقود والمستحقات الشهرية المتكررة)
+     ============================================================ */
+  var STATUS_LABEL = { active: 'ساري', ended: 'منتهي', paused: 'موقوف' };
+  var STATUS_COLOR = {
+    active: ['var(--green-bg)', 'var(--green)'],
+    ended:  ['var(--red-bg)', 'var(--red)'],
+    paused: ['#fff4e0', '#b06f00']
+  };
+  var DUE_LABEL = { paid: 'تم السداد', partial: 'سداد جزئي', unpaid: 'لم يُسدَّد', none: 'لا يوجد مستحق' };
+  var DUE_COLOR = {
+    paid: ['var(--green-bg)', 'var(--green)'], partial: ['#fff4e0', '#b06f00'],
+    unpaid: ['var(--red-bg)', 'var(--red)'], none: ['var(--bg)', 'var(--muted)']
+  };
+  function badge(text, colors) {
+    return '<span class="tag" style="background:' + colors[0] + ';color:' + colors[1] + '">' + text + '</span>';
+  }
+
+  function viewClients() {
+    var clients = S.db.clients;
+    var rows = clients.map(function (c) {
+      var s = S.clientSummary(c);
+      return '<tr>' +
+        '<td style="font-weight:600">' + F.esc(c.name) + '</td>' +
+        '<td>' + badge(STATUS_LABEL[s.effectiveStatus], STATUS_COLOR[s.effectiveStatus]) + '</td>' +
+        '<td>' + badge(DUE_LABEL[s.currentStatus], DUE_COLOR[s.currentStatus]) + '</td>' +
+        '<td class="num" style="font-weight:700;color:' + (s.overdue > 0 ? 'var(--red)' : 'var(--muted)') + '">' +
+          (s.overdue > 0 ? F.money(s.overdue) + ' ر.س' : '—') +
+          (s.overdueCount > 0 ? '<span class="hint" style="display:block">' + s.overdueCount + ' شهر متأخر</span>' : '') +
+        '</td>' +
+        '<td class="num">' + F.money(c.monthlyAmount) + ' ر.س</td>' +
+        '<td><div class="t-actions">' +
+          '<button class="btn btn-sm" data-client-detail="' + c.id + '">تفاصيل</button>' +
+          '<button class="btn btn-sm btn-danger" data-client-del="' + c.id + '">حذف</button>' +
+        '</div></td></tr>';
+    }).join('');
+
+    var totalOverdue = clients.reduce(function (a, c) { return a + S.clientSummary(c).overdue; }, 0);
+    var activeCount = clients.filter(function (c) { return S.clientSummary(c).effectiveStatus === 'active'; }).length;
+
+    return '<div class="page-head"><div>' +
+             '<h2>متابعة العملاء</h2>' +
+             '<p>الجهات التي تدفع اشتراكاً شهرياً — حالة العقد والسداد والمتأخرات</p>' +
+           '</div><div style="display:flex;gap:8px;flex-wrap:wrap">' +
+             '<button class="btn" data-gen-dues>توليد مستحقات ' + F.arMonth(S.currentPeriod().slice(0, 7)) + '</button>' +
+             '<button class="btn btn-primary" data-add-client>' +
+               '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+               '<path d="M12 5v14M5 12h14"/></svg>عميل جديد</button>' +
+           '</div></div>' +
+           '<div class="grid grid-3 mb">' +
+             kpiCard('عدد العملاء النشطين', F.int(activeCount), 'من إجمالي ' + clients.length + ' عميل',
+                     'cart', { v: 0, dir: 'flat' }) +
+             kpiCard('إجمالي المتأخرات', F.money(totalOverdue) + ' ر.س', 'مجموع كل الأشهر غير المسدّدة بالكامل',
+                     'money', { v: 0, dir: 'flat' }) +
+             kpiCard('الشهر الحالي', F.arMonth(S.currentPeriod().slice(0, 7)), 'اضغط «توليد مستحقات» لإنشاء مستحقات الشهر',
+                     'trend', { v: 0, dir: 'flat' }) +
+           '</div>' +
+           '<div class="panel"><div class="table-wrap"><table><thead><tr>' +
+             '<th>الجهة</th><th>حالة العقد</th><th>حالة الشهر الحالي</th><th>المتأخر</th>' +
+             '<th>المبلغ الشهري</th><th></th>' +
+           '</tr></thead><tbody>' +
+           (clients.length ? rows : '<tr><td colspan="6"><div class="empty">' +
+             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">' +
+             '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>' +
+             '<h4>لا يوجد عملاء بعد</h4><p>أضف أول جهة تدفع لك اشتراكاً شهرياً.</p>' +
+             '<button class="btn btn-primary" data-add-client>إضافة عميل</button></div></td></tr>') +
+           '</tbody></table></div></div>';
+  }
+
+  function clientForm(existing) {
+    var c = existing || {
+      entityId: '', name: '', contractStatus: 'active',
+      contractStart: '', contractEnd: '', monthlyAmount: '', note: ''
+    };
+    var body =
+      '<div class="form-grid">' +
+        field('اسم الجهة', '<input id="cl_name" value="' + F.esc(c.name) + '" placeholder="مثال: جمعية الرأفة الطبية">') +
+        field('المبلغ الشهري (ر.س)',
+          '<input type="number" id="cl_amount" min="0" step="0.01" value="' + c.monthlyAmount + '" placeholder="0.00">') +
+        '<div class="field"><label>حالة العقد</label><select id="cl_status">' +
+          '<option value="active"' + (c.contractStatus === 'active' ? ' selected' : '') + '>ساري</option>' +
+          '<option value="paused"' + (c.contractStatus === 'paused' ? ' selected' : '') + '>موقوف مؤقتاً</option>' +
+          '<option value="ended"' + (c.contractStatus === 'ended' ? ' selected' : '') + '>منتهي</option>' +
+        '</select></div>' +
+        field('ربط بمنشأة (اختياري)', sel('cl_entity',
+          [['', '— بدون ربط —']].concat(S.db.entities.map(function (x) { return [x.id, x.name]; })),
+          c.entityId || '')) +
+        field('بداية العقد', '<input type="date" id="cl_start" value="' + (c.contractStart || '') + '">') +
+        field('نهاية العقد', '<input type="date" id="cl_end" value="' + (c.contractEnd || '') + '">') +
+        '<div class="field full"><label>ملاحظات</label>' +
+          '<textarea id="cl_note" rows="2" placeholder="اختياري">' + F.esc(c.note || '') + '</textarea></div>' +
+      '</div>';
+
+    openModal(existing ? 'تعديل عميل' : 'عميل جديد', body,
+      '<button class="btn btn-primary" id="modalSave">حفظ</button>' +
+      '<button class="btn" data-close>إلغاء</button>',
+      function () {
+        var name = $('#cl_name').value.trim();
+        if (!name) { toast('اسم الجهة مطلوب', true); return; }
+        var rec = {
+          name: name, monthlyAmount: $('#cl_amount').value, contractStatus: $('#cl_status').value,
+          entityId: $('#cl_entity').value || null,
+          contractStart: $('#cl_start').value || null, contractEnd: $('#cl_end').value || null,
+          note: $('#cl_note').value
+        };
+        closeModal();
+        if (existing) { run(function () { return S.updateClient(existing.id, rec); }, 'تم تحديث العميل'); }
+        else { run(function () { return S.addClient(rec); }, 'تمت إضافة العميل'); }
+      });
+  }
+
+  /** نافذة تفاصيل عميل: تبقى مفتوحة وتُحدَّث ذاتياً بعد كل عملية */
+  function openClientDetail(clientId) {
+    var c = S.db.clients.find(function (x) { return x.id === clientId; });
+    if (!c) { closeModal(); return; }
+    var s = S.clientSummary(c);
+    var dues = S.clientDuesOf(c.id);
+    var canEdit = S.canWrite();
+
+    var dueRows = dues.map(function (d) {
+      var st = !d ? 'none' : d.amountPaid >= d.amountDue ? 'paid' : d.amountPaid > 0 ? 'partial' : 'unpaid';
+      return '<tr>' +
+        '<td>' + F.arMonth(d.period.slice(0, 7)) + '</td>' +
+        '<td class="num">' + F.money(d.amountDue) + '</td>' +
+        '<td class="num">' + F.money(d.amountPaid) + '</td>' +
+        '<td>' + badge(DUE_LABEL[st], DUE_COLOR[st]) + '</td>' +
+        '<td class="num">' + (d.paidDate ? F.arDate(d.paidDate) : '—') + '</td>' +
+        '<td>' + (canEdit ? '<div class="t-actions">' +
+          '<button class="btn btn-sm" data-due-edit="' + d.id + '">تعديل</button>' +
+          '<button class="btn btn-sm btn-danger" data-due-del="' + d.id + '">حذف</button>' +
+        '</div>' : '—') + '</td></tr>';
+    }).join('');
+
+    var body =
+      '<div class="recon mb" style="padding:14px;background:var(--bg);border-radius:12px">' +
+        '<div><span class="k">إجمالي المطلوب</span><span class="v num">' + F.money(s.totalDue) + ' ر.س</span></div>' +
+        '<div><span class="k">إجمالي المدفوع</span><span class="v num">' + F.money(s.totalPaid) + ' ر.س</span></div>' +
+        '<div><span class="k">المتأخر</span><span class="v num" style="color:' +
+          (s.overdue > 0 ? 'var(--red)' : 'var(--green)') + '">' + F.money(s.overdue) + ' ر.س</span></div>' +
+        '<div><span class="k">حالة العقد</span><span class="v">' +
+          badge(STATUS_LABEL[s.effectiveStatus], STATUS_COLOR[s.effectiveStatus]) + '</span></div>' +
+      '</div>' +
+      (canEdit ?
+        '<div class="form-grid mb" style="padding:14px;border:1px dashed var(--line);border-radius:12px">' +
+          '<div class="field full"><label>تسجيل / تحديث مستحق شهر</label></div>' +
+          field('الشهر', '<input type="month" id="due_period" value="' + S.currentPeriod().slice(0, 7) + '">') +
+          field('المبلغ المطلوب (ر.س)', '<input type="number" id="due_amount" min="0" step="0.01" value="' +
+            c.monthlyAmount + '">') +
+          field('المبلغ المدفوع (ر.س)', '<input type="number" id="due_paid" min="0" step="0.01" value="0">') +
+          field('تاريخ السداد', '<input type="date" id="due_paiddate" value="">') +
+          '<div class="field full"><button class="btn btn-primary" id="dueSaveBtn" type="button">حفظ المستحق</button></div>' +
+        '</div>' : '') +
+      '<div class="table-wrap"><table><thead><tr>' +
+        '<th>الشهر</th><th>المطلوب</th><th>المدفوع</th><th>الحالة</th><th>تاريخ السداد</th><th></th>' +
+      '</tr></thead><tbody>' +
+      (dues.length ? dueRows : '<tr><td colspan="6">' + C.empty('لا توجد مستحقات مسجّلة بعد') + '</td></tr>') +
+      '</tbody></table></div>';
+
+    openModal('تفاصيل: ' + c.name, body,
+      (canEdit ? '<button class="btn" data-edit-client="' + c.id + '">تعديل بيانات العميل</button>' : '') +
+      '<button class="btn" data-close>إغلاق</button>',
+      null);
+
+    if (!canEdit) return;
+
+    $('#dueSaveBtn').onclick = function () {
+      var period = $('#due_period').value;
+      if (!period) { toast('حدّد الشهر', true); return; }
+      run(function () {
+        return S.saveDue({
+          clientId: c.id, period: period + '-01',
+          amountDue: $('#due_amount').value, amountPaid: $('#due_paid').value,
+          paidDate: $('#due_paiddate').value || null
+        });
+      }, 'تم حفظ المستحق').then(function () { openClientDetail(c.id); });
+    };
+
+    $('#modalBody').onclick = function (ev) {
+      var de = ev.target.closest('[data-due-edit]');
+      if (de) {
+        var d = dues.find(function (x) { return x.id === de.dataset.dueEdit; });
+        if (d) {
+          $('#due_period').value = d.period.slice(0, 7);
+          $('#due_amount').value = d.amountDue;
+          $('#due_paid').value = d.amountPaid;
+          $('#due_paiddate').value = d.paidDate || '';
+          $('#due_period').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        return;
+      }
+      var dd = ev.target.closest('[data-due-del]');
+      if (dd) {
+        confirmBox('حذف مستحق هذا الشهر نهائياً؟', function () {
+          run(function () { return S.deleteDue(dd.dataset.dueDel); }, 'تم الحذف')
+            .then(function () { openClientDetail(c.id); });
+        });
+        return;
+      }
+    };
+
+    $('#modalFoot').onclick = function (ev) {
+      if (ev.target.closest('[data-edit-client]')) { closeModal(); clientForm(c); }
+    };
+  }
+
+  /* ============================================================
      الموجّه
      ============================================================ */
   var VIEWS = {
     dashboard: viewDashboard, entries: viewEntries, invoices: viewInvoices,
     monthly: viewMonthly, channels: viewChannels, entities: viewEntities,
-    team: viewTeam, tax: viewTaxReport, log: viewLog, settings: viewSettings
+    team: viewTeam, tax: viewTaxReport, clients: viewClients, log: viewLog, settings: viewSettings
   };
 
   function render() {
@@ -1471,6 +1678,26 @@
     }
     if (t.closest('[data-goto-settings]')) {
       state.view = 'settings'; render(); return;
+    }
+
+    /* ---------- متابعة العملاء ---------- */
+    if (t.closest('[data-add-client]')) { clientForm(null); return; }
+    var cdt = t.closest('[data-client-detail]');
+    if (cdt) { openClientDetail(cdt.dataset.clientDetail); return; }
+    var cdl = t.closest('[data-client-del]');
+    if (cdl) {
+      confirmBox('سيُحذف هذا العميل وكل سجل مستحقاته الشهرية نهائياً. هل أنت متأكد؟', function () {
+        run(function () { return S.deleteClient(cdl.dataset.clientDel); }, 'تم حذف العميل');
+      });
+      return;
+    }
+    if (t.closest('[data-gen-dues]')) {
+      try {
+        var n = await S.generateDuesForPeriod(S.currentPeriod());
+        toast(n > 0 ? 'تم توليد ' + n + ' مستحق جديد' : 'كل العملاء النشطين لديهم مستحق لهذا الشهر بالفعل');
+        render();
+      } catch (genErr) { toast(genErr.message || 'تعذّر التوليد', true); }
+      return;
     }
   });
 
