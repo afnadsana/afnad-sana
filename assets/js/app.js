@@ -1264,12 +1264,22 @@
   /* ============================================================
      متابعة العملاء (العقود والمستحقات الشهرية المتكررة)
      ============================================================ */
-  var STATUS_LABEL = { active: 'ساري', ended: 'منتهي', paused: 'موقوف' };
+  var STATUS_LABEL = { active: 'ساري', ended: 'منتهي', paused: 'موقوف', pending: 'قيد توقيع العقد' };
   var STATUS_COLOR = {
-    active: ['var(--green-bg)', 'var(--green)'],
-    ended:  ['var(--red-bg)', 'var(--red)'],
-    paused: ['#fff4e0', '#b06f00']
+    active:  ['var(--green-bg)', 'var(--green)'],
+    ended:   ['var(--red-bg)', 'var(--red)'],
+    paused:  ['#fff4e0', '#b06f00'],
+    pending: ['#e8ecff', '#3b45c9']
   };
+  var FEE_LABEL = { fixed: 'مبلغ ثابت', percent: 'نسبة من الإيراد', net_markup: 'خصم ثم هامش' };
+  /** وصف نموذج الأتعاب بصيغة مقروءة */
+  function feeDesc(c) {
+    if (c.feeType === 'percent') return F.pct(c.feePercent, 1) + ' من الإيراد + ضريبة';
+    if (c.feeType === 'net_markup') {
+      return '− ' + F.pct(c.feeDeductPercent, 1) + ' ثم + ' + F.pct(c.feeMarkupPercent, 1) + ' + ضريبة';
+    }
+    return F.money(c.monthlyAmount) + ' ر.س شهرياً';
+  }
   var DUE_LABEL = { paid: 'تم السداد', partial: 'سداد جزئي', unpaid: 'لم يُسدَّد', none: 'لا يوجد مستحق' };
   var DUE_COLOR = {
     paid: ['var(--green-bg)', 'var(--green)'], partial: ['#fff4e0', '#b06f00'],
@@ -1291,7 +1301,10 @@
           (s.overdue > 0 ? F.money(s.overdue) + ' ر.س' : '—') +
           (s.overdueCount > 0 ? '<span class="hint" style="display:block">' + s.overdueCount + ' شهر متأخر</span>' : '') +
         '</td>' +
-        '<td class="num">' + F.money(c.monthlyAmount) + ' ر.س</td>' +
+        '<td><span class="num">' + F.esc(feeDesc(c)) + '</span>' +
+          (c.feeType && c.feeType !== 'fixed'
+            ? '<span class="hint" style="display:block">' + FEE_LABEL[c.feeType] + '</span>' : '') +
+        '</td>' +
         '<td><div class="t-actions">' +
           '<button class="btn btn-sm" data-client-detail="' + c.id + '">تفاصيل</button>' +
           '<button class="btn btn-sm btn-danger" data-client-del="' + c.id + '">حذف</button>' +
@@ -1320,7 +1333,7 @@
            '</div>' +
            '<div class="panel"><div class="table-wrap"><table><thead><tr>' +
              '<th>الجهة</th><th>حالة العقد</th><th>حالة الشهر الحالي</th><th>المتأخر</th>' +
-             '<th>المبلغ الشهري</th><th></th>' +
+             '<th>الأتعاب</th><th></th>' +
            '</tr></thead><tbody>' +
            (clients.length ? rows : '<tr><td colspan="6"><div class="empty">' +
              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">' +
@@ -1333,15 +1346,38 @@
   function clientForm(existing) {
     var c = existing || {
       entityId: '', name: '', contractStatus: 'active',
-      contractStart: '', contractEnd: '', monthlyAmount: '', note: ''
+      contractStart: '', contractEnd: '', monthlyAmount: '', note: '',
+      feeType: 'fixed', feePercent: '', feeDeductPercent: '', feeMarkupPercent: ''
     };
+    var ft = c.feeType || 'fixed';
     var body =
       '<div class="form-grid">' +
         field('اسم الجهة', '<input id="cl_name" value="' + F.esc(c.name) + '" placeholder="مثال: جمعية الرأفة الطبية">') +
-        field('المبلغ الشهري (ر.س)',
-          '<input type="number" id="cl_amount" min="0" step="0.01" value="' + c.monthlyAmount + '" placeholder="0.00">') +
+        '<div class="field"><label>طريقة احتساب الأتعاب</label><select id="cl_feetype">' +
+          '<option value="fixed"' + (ft === 'fixed' ? ' selected' : '') + '>مبلغ شهري ثابت</option>' +
+          '<option value="percent"' + (ft === 'percent' ? ' selected' : '') + '>نسبة من الإيراد</option>' +
+          '<option value="net_markup"' + (ft === 'net_markup' ? ' selected' : '') + '>خصم ثم هامش على الإيراد</option>' +
+        '</select><span class="hint">الضريبة تُضاف تلقائياً على الناتج</span></div>' +
+        '<div class="field" id="wrap_fixed">' +
+          '<label>المبلغ الشهري (ر.س)</label>' +
+          '<input type="number" id="cl_amount" min="0" step="0.01" value="' + c.monthlyAmount + '" placeholder="0.00">' +
+          '<span class="hint">قبل الضريبة</span></div>' +
+        '<div class="field" id="wrap_pct">' +
+          '<label>النسبة من الإيراد (%)</label>' +
+          '<input type="number" id="cl_pct" min="0" max="100" step="0.1" value="' + c.feePercent + '" placeholder="20">' +
+        '</div>' +
+        '<div class="field" id="wrap_ded">' +
+          '<label>يُخصم من الإجمالي (%)</label>' +
+          '<input type="number" id="cl_ded" min="0" max="100" step="0.1" value="' + c.feeDeductPercent + '" placeholder="2.5">' +
+        '</div>' +
+        '<div class="field" id="wrap_mk">' +
+          '<label>ثم يُضاف هامش (%)</label>' +
+          '<input type="number" id="cl_mk" min="0" max="1000" step="0.1" value="' + c.feeMarkupPercent + '" placeholder="28">' +
+        '</div>' +
+        '<div class="field full" id="feePreview" style="background:var(--bg);padding:12px;border-radius:10px"></div>' +
         '<div class="field"><label>حالة العقد</label><select id="cl_status">' +
           '<option value="active"' + (c.contractStatus === 'active' ? ' selected' : '') + '>ساري</option>' +
+          '<option value="pending"' + (c.contractStatus === 'pending' ? ' selected' : '') + '>قيد توقيع العقد</option>' +
           '<option value="paused"' + (c.contractStatus === 'paused' ? ' selected' : '') + '>موقوف مؤقتاً</option>' +
           '<option value="ended"' + (c.contractStatus === 'ended' ? ' selected' : '') + '>منتهي</option>' +
         '</select></div>' +
@@ -1364,12 +1400,48 @@
           name: name, monthlyAmount: $('#cl_amount').value, contractStatus: $('#cl_status').value,
           entityId: $('#cl_entity').value || null,
           contractStart: $('#cl_start').value || null, contractEnd: $('#cl_end').value || null,
-          note: $('#cl_note').value
+          note: $('#cl_note').value,
+          feeType: $('#cl_feetype').value,
+          feePercent: $('#cl_pct').value || 0,
+          feeDeductPercent: $('#cl_ded').value || 0,
+          feeMarkupPercent: $('#cl_mk').value || 0
         };
         closeModal();
         if (existing) { run(function () { return S.updateClient(existing.id, rec); }, 'تم تحديث العميل'); }
         else { run(function () { return S.addClient(rec); }, 'تمت إضافة العميل'); }
       });
+
+    /* إظهار الحقول المناسبة لنموذج الأتعاب + معاينة حية على مبلغ افتراضي */
+    function syncFee() {
+      var t = $('#cl_feetype').value;
+      $('#wrap_fixed').style.display = t === 'fixed' ? '' : 'none';
+      $('#wrap_pct').style.display   = t === 'percent' ? '' : 'none';
+      $('#wrap_ded').style.display   = t === 'net_markup' ? '' : 'none';
+      $('#wrap_mk').style.display    = t === 'net_markup' ? '' : 'none';
+
+      var draft = {
+        feeType: t, monthlyAmount: $('#cl_amount').value,
+        feePercent: $('#cl_pct').value, feeDeductPercent: $('#cl_ded').value,
+        feeMarkupPercent: $('#cl_mk').value
+      };
+      if (t === 'fixed') {
+        var f = S.computeFee(draft, 0);
+        $('#feePreview').innerHTML = '<div style="font-size:12.5px">المطلوب شهرياً: <strong class="num">' +
+          F.money(f.total) + ' ر.س</strong> <span class="hint">(' + F.money(f.base) +
+          ' + ضريبة ' + F.money(f.vat) + ')</span></div>';
+      } else {
+        var sample = 10000;
+        var r = S.computeFee(draft, sample);
+        $('#feePreview').innerHTML = '<div style="font-size:12.5px">مثال: لو كان إيراد الشهر <strong class="num">' +
+          F.money(sample) + ' ر.س</strong> → المطلوب <strong class="num">' + F.money(r.total) +
+          ' ر.س</strong> <span class="hint">(' + F.money(r.base) + ' + ضريبة ' + F.money(r.vat) + ')</span></div>';
+      }
+    }
+    $('#modalBody').onchange = syncFee;
+    ['cl_amount', 'cl_pct', 'cl_ded', 'cl_mk'].forEach(function (id) {
+      $('#' + id).addEventListener('input', syncFee);
+    });
+    syncFee();
   }
 
   /** نافذة تفاصيل عميل: تبقى مفتوحة وتُحدَّث ذاتياً بعد كل عملية */
@@ -1380,15 +1452,23 @@
     var dues = S.clientDuesOf(c.id);
     var canEdit = S.canWrite();
 
+    var computed = c.feeType && c.feeType !== 'fixed';
+
     var dueRows = dues.map(function (d) {
-      var st = !d ? 'none' : d.amountPaid >= d.amountDue ? 'paid' : d.amountPaid > 0 ? 'partial' : 'unpaid';
+      var st = d.amountPaid >= d.amountDue && d.amountDue > 0 ? 'paid'
+             : d.amountPaid > 0 ? 'partial' : 'unpaid';
+      var rest = Math.round((d.amountDue - d.amountPaid) * 100) / 100;
       return '<tr>' +
         '<td>' + F.arMonth(d.period.slice(0, 7)) + '</td>' +
+        (computed ? '<td class="num">' + (d.revenueBase > 0 ? F.money(d.revenueBase) : '—') + '</td>' : '') +
         '<td class="num">' + F.money(d.amountDue) + '</td>' +
         '<td class="num">' + F.money(d.amountPaid) + '</td>' +
+        '<td class="num" style="font-weight:700;color:' +
+          (rest > 0 ? 'var(--red)' : 'var(--green)') + '">' + F.money(rest) + '</td>' +
         '<td>' + badge(DUE_LABEL[st], DUE_COLOR[st]) + '</td>' +
         '<td class="num">' + (d.paidDate ? F.arDate(d.paidDate) : '—') + '</td>' +
         '<td>' + (canEdit ? '<div class="t-actions">' +
+          (rest > 0 ? '<button class="btn btn-sm btn-primary" data-due-pay="' + d.id + '">تم السداد</button>' : '') +
           '<button class="btn btn-sm" data-due-edit="' + d.id + '">تعديل</button>' +
           '<button class="btn btn-sm btn-danger" data-due-del="' + d.id + '">حذف</button>' +
         '</div>' : '—') + '</td></tr>';
@@ -1405,18 +1485,36 @@
       '</div>' +
       (canEdit ?
         '<div class="form-grid mb" style="padding:14px;border:1px dashed var(--line);border-radius:12px">' +
-          '<div class="field full"><label>تسجيل / تحديث مستحق شهر</label></div>' +
+          '<div class="field full"><label>تسجيل / تحديث مستحق شهر</label>' +
+            '<span class="hint">نموذج الأتعاب: ' + F.esc(feeDesc(c)) + '</span></div>' +
           field('الشهر', '<input type="month" id="due_period" value="' + S.currentPeriod().slice(0, 7) + '">') +
-          field('المبلغ المطلوب (ر.س)', '<input type="number" id="due_amount" min="0" step="0.01" value="' +
-            c.monthlyAmount + '">') +
-          field('المبلغ المدفوع (ر.س)', '<input type="number" id="due_paid" min="0" step="0.01" value="0">') +
-          field('تاريخ السداد', '<input type="date" lang="en-GB" id="due_paiddate" value="">') +
-          '<div class="field full"><button class="btn btn-primary" id="dueSaveBtn" type="button">حفظ المستحق</button></div>' +
+          (computed
+            ? field('إيراد الشهر (ر.س)',
+                '<input type="number" id="due_revenue" min="0" step="0.01" value="" placeholder="0.00">',
+                'أدخل الإيراد المحقق ويُحسب المطلوب تلقائياً')
+            : '') +
+          field('المطلوب شامل الضريبة (ر.س)',
+            '<input type="number" id="due_amount" min="0" step="0.01" value="">') +
+          '<div class="field"><label>هل تم السداد؟</label><select id="due_state">' +
+            '<option value="no">لا — لم يُسدَّد</option>' +
+            '<option value="full">نعم — سُدِّد بالكامل</option>' +
+            '<option value="partial">سداد جزئي</option>' +
+          '</select></div>' +
+          '<div class="field" id="wrap_paid"><label>المبلغ المسدَّد (ر.س)</label>' +
+            '<input type="number" id="due_paid" min="0" step="0.01" value="0"></div>' +
+          '<div class="field" id="wrap_paiddate"><label>تاريخ السداد</label>' +
+            dateField('due_paiddate', '') + '</div>' +
+          '<div class="field full" id="duePreview" style="background:var(--bg);padding:12px;border-radius:10px"></div>' +
+          '<div class="field full"><button class="btn btn-primary" id="dueSaveBtn" type="button">حفظ المستحق</button>' +
+            '<button class="btn" id="dueResetBtn" type="button" style="margin-inline-start:8px">تفريغ الحقول</button></div>' +
         '</div>' : '') +
       '<div class="table-wrap"><table><thead><tr>' +
-        '<th>الشهر</th><th>المطلوب</th><th>المدفوع</th><th>الحالة</th><th>تاريخ السداد</th><th></th>' +
+        '<th>الشهر</th>' + (computed ? '<th>الإيراد</th>' : '') +
+        '<th>المطلوب</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th><th>تاريخ السداد</th><th></th>' +
       '</tr></thead><tbody>' +
-      (dues.length ? dueRows : '<tr><td colspan="6">' + C.empty('لا توجد مستحقات مسجّلة بعد') + '</td></tr>') +
+      (dues.length ? dueRows
+        : '<tr><td colspan="' + (computed ? 8 : 7) + '">' +
+          C.empty('لا توجد مستحقات مسجّلة بعد') + '</td></tr>') +
       '</tbody></table></div>';
 
     openModal('تفاصيل: ' + c.name, body,
@@ -1426,19 +1524,110 @@
 
     if (!canEdit) return;
 
+    /* الإيراد يحسب المطلوب تلقائياً، وحالة السداد تتحكم بحقلَي المبلغ والتاريخ */
+    function syncDue() {
+      var state = $('#due_state').value;
+      var amount = parseFloat($('#due_amount').value) || 0;
+
+      if (computed) {
+        var rev = parseFloat($('#due_revenue').value) || 0;
+        if (rev > 0) {
+          var f = S.computeFee(c, rev);
+          $('#due_amount').value = f.total.toFixed(2);
+          amount = f.total;
+          $('#duePreview').innerHTML =
+            '<div style="font-size:12.5px">إيراد ' + F.money(rev) + ' ر.س → أتعاب ' +
+            '<strong class="num">' + F.money(f.base) + '</strong> + ضريبة ' +
+            '<strong class="num">' + F.money(f.vat) + '</strong> = المطلوب ' +
+            '<strong class="num">' + F.money(f.total) + ' ر.س</strong></div>';
+        }
+      }
+
+      $('#wrap_paid').style.display = state === 'partial' ? '' : 'none';
+      $('#wrap_paiddate').style.display = state === 'no' ? 'none' : '';
+      if (state === 'full') $('#due_paid').value = amount.toFixed(2);
+      if (state === 'no') $('#due_paid').value = '0';
+
+      if (!computed || !(parseFloat($('#due_revenue') && $('#due_revenue').value) > 0)) {
+        var paid = state === 'full' ? amount
+                 : state === 'no' ? 0 : (parseFloat($('#due_paid').value) || 0);
+        var rest = Math.round((amount - paid) * 100) / 100;
+        $('#duePreview').innerHTML =
+          '<div style="font-size:12.5px">المطلوب <strong class="num">' + F.money(amount) +
+          '</strong> · المسدَّد <strong class="num">' + F.money(paid) +
+          '</strong> · المتبقي <strong class="num" style="color:' +
+          (rest > 0 ? 'var(--red)' : 'var(--green)') + '">' + F.money(rest) + ' ر.س</strong></div>';
+      }
+    }
+
     $('#dueSaveBtn').onclick = function () {
       var period = $('#due_period').value;
       if (!period) { toast('حدّد الشهر', true); return; }
+      var amount = parseFloat($('#due_amount').value) || 0;
+      if (!(amount > 0)) { toast('أدخل المبلغ المطلوب', true); return; }
+
+      var state = $('#due_state').value;
+      var paid = state === 'full' ? amount
+               : state === 'no' ? 0 : (parseFloat($('#due_paid').value) || 0);
+      if (paid > amount) { toast('المبلغ المسدَّد أكبر من المطلوب', true); return; }
+
+      var pd = fromDisplayDate($('#due_paiddate').value);
+      if (state !== 'no' && !pd) pd = S.todayISO();
+
       run(function () {
         return S.saveDue({
           clientId: c.id, period: period + '-01',
-          amountDue: $('#due_amount').value, amountPaid: $('#due_paid').value,
-          paidDate: $('#due_paiddate').value || null
+          amountDue: amount, amountPaid: paid,
+          revenueBase: computed ? ($('#due_revenue').value || 0) : 0,
+          paidDate: state === 'no' ? null : pd
         });
       }, 'تم حفظ المستحق').then(function () { openClientDetail(c.id); });
     };
 
+    $('#dueResetBtn').onclick = function () {
+      $('#due_period').value = S.currentPeriod().slice(0, 7);
+      $('#due_amount').value = '';
+      $('#due_paid').value = '0';
+      $('#due_paiddate').value = '';
+      $('#due_state').value = 'no';
+      if (computed) $('#due_revenue').value = '';
+      syncDue();
+    };
+
+    $('#modalBody').onchange = syncDue;
+    ['due_amount', 'due_paid'].forEach(function (id) {
+      $('#' + id).addEventListener('input', syncDue);
+    });
+    if (computed) $('#due_revenue').addEventListener('input', syncDue);
+    syncDue();
+
     $('#modalBody').onclick = function (ev) {
+      /* زر التقويم داخل النافذة */
+      var dp = ev.target.closest('[data-dp]');
+      if (dp) {
+        var nat = $('#' + dp.dataset.dp + '_n');
+        if (nat.showPicker) { try { nat.showPicker(); } catch (err) { nat.focus(); } }
+        else { nat.focus(); nat.click(); }
+        return;
+      }
+
+      /* تسجيل سداد كامل بضغطة واحدة */
+      var dp2 = ev.target.closest('[data-due-pay]');
+      if (dp2) {
+        var dd2 = dues.find(function (x) { return x.id === dp2.dataset.duePay; });
+        if (dd2) {
+          run(function () {
+            return S.saveDue({
+              clientId: c.id, period: dd2.period,
+              amountDue: dd2.amountDue, amountPaid: dd2.amountDue,
+              revenueBase: dd2.revenueBase, paidDate: S.todayISO(),
+              note: dd2.note
+            });
+          }, 'تم تسجيل السداد بالكامل').then(function () { openClientDetail(c.id); });
+        }
+        return;
+      }
+
       var de = ev.target.closest('[data-due-edit]');
       if (de) {
         var d = dues.find(function (x) { return x.id === de.dataset.dueEdit; });
@@ -1446,7 +1635,11 @@
           $('#due_period').value = d.period.slice(0, 7);
           $('#due_amount').value = d.amountDue;
           $('#due_paid').value = d.amountPaid;
-          $('#due_paiddate').value = d.paidDate || '';
+          $('#due_paiddate').value = toDisplayDate(d.paidDate);
+          if (computed) $('#due_revenue').value = d.revenueBase || '';
+          $('#due_state').value = d.amountPaid <= 0 ? 'no'
+            : d.amountPaid >= d.amountDue ? 'full' : 'partial';
+          syncDue();
           $('#due_period').scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
         return;

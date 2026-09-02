@@ -70,13 +70,18 @@
     return {
       id: r.id, entityId: r.entity_id, name: r.name,
       contractStatus: r.contract_status, contractStart: r.contract_start, contractEnd: r.contract_end,
-      monthlyAmount: num(r.monthly_amount), note: r.note || ''
+      monthlyAmount: num(r.monthly_amount), note: r.note || '',
+      feeType: r.fee_type || 'fixed',
+      feePercent: num(r.fee_percent),
+      feeDeductPercent: num(r.fee_deduct_percent),
+      feeMarkupPercent: num(r.fee_markup_percent)
     };
   }
   function mapDue(r) {
     return {
       id: r.id, clientId: r.client_id, period: r.period,
       amountDue: num(r.amount_due), amountPaid: num(r.amount_paid),
+      revenueBase: num(r.revenue_base),
       paidDate: r.paid_date, note: r.note || ''
     };
   }
@@ -418,7 +423,11 @@
       org_id: orgId, entity_id: c.entityId || null, name: (c.name || '').trim(),
       contract_status: c.contractStatus || 'active',
       contract_start: c.contractStart || null, contract_end: c.contractEnd || null,
-      monthly_amount: num(c.monthlyAmount), note: (c.note || '').trim(), created_by: me.id
+      monthly_amount: num(c.monthlyAmount), note: (c.note || '').trim(), created_by: me.id,
+      fee_type: c.feeType || 'fixed',
+      fee_percent: num(c.feePercent),
+      fee_deduct_percent: num(c.feeDeductPercent),
+      fee_markup_percent: num(c.feeMarkupPercent)
     };
     var r = await client().from('clients').insert(row).select().single();
     if (r.error) throw new Error(r.error.message);
@@ -438,6 +447,10 @@
     if (patch.contractEnd    !== undefined) row.contract_end    = patch.contractEnd || null;
     if (patch.monthlyAmount  !== undefined) row.monthly_amount  = num(patch.monthlyAmount);
     if (patch.note           !== undefined) row.note            = (patch.note || '').trim();
+    if (patch.feeType          !== undefined) row.fee_type           = patch.feeType || 'fixed';
+    if (patch.feePercent       !== undefined) row.fee_percent        = num(patch.feePercent);
+    if (patch.feeDeductPercent !== undefined) row.fee_deduct_percent = num(patch.feeDeductPercent);
+    if (patch.feeMarkupPercent !== undefined) row.fee_markup_percent = num(patch.feeMarkupPercent);
 
     var r = await client().from('clients').update(row).eq('id', id).select().single();
     if (r.error) throw new Error(r.error.message);
@@ -464,6 +477,7 @@
     var row = {
       org_id: orgId, client_id: due.clientId, period: periodOf(due.period),
       amount_due: num(due.amountDue), amount_paid: num(due.amountPaid),
+      revenue_base: num(due.revenueBase),
       paid_date: due.paidDate || null, note: (due.note || '').trim(), created_by: me.id
     };
     var r = await client().from('client_dues')
@@ -493,6 +507,8 @@
     var active = db.clients.filter(function (c) {
       if (c.contractStatus !== 'active') return false;
       if (c.contractEnd && c.contractEnd < period) return false;
+      // الأتعاب المحسوبة من الإيراد تحتاج إدخال إيراد الشهر يدوياً، فلا تُولَّد تلقائياً
+      if (c.feeType && c.feeType !== 'fixed') return false;
       if (c.monthlyAmount <= 0) return false;
       var has = db.clientDues.some(function (x) { return x.clientId === c.id && x.period === period; });
       return !has;
@@ -510,10 +526,36 @@
              .sort(function (a, b) { return a.period < b.period ? 1 : -1; });
   }
 
+  /**
+   * يحسب المستحق من إيراد الشهر حسب نموذج أتعاب العميل، ثم يضيف الضريبة.
+   *   fixed      → المبلغ الشهري الثابت (لا يعتمد على الإيراد)
+   *   percent    → الإيراد × النسبة
+   *   net_markup → الإيراد × (1 − الخصم) × (1 + الهامش)
+   * يرجع { base, vat, total } — المطلوب للسداد هو total (شامل الضريبة).
+   */
+  function computeFee(c, revenue, vatRate) {
+    var rev = num(revenue);
+    var rate = vatRate === undefined || vatRate === null
+      ? num(db.settings.defaultVatRate) || 0.15
+      : num(vatRate);
+    var base;
+    if (c.feeType === 'percent') {
+      base = rev * (num(c.feePercent) / 100);
+    } else if (c.feeType === 'net_markup') {
+      base = rev * (1 - num(c.feeDeductPercent) / 100) * (1 + num(c.feeMarkupPercent) / 100);
+    } else {
+      base = num(c.monthlyAmount);
+    }
+    base = Math.round(base * 100) / 100;
+    var vat = Math.round(base * rate * 100) / 100;
+    return { base: base, vat: vat, total: Math.round((base + vat) * 100) / 100 };
+  }
+
   /** هل العقد ساري فعلياً؟ (يأخذ بعين الاعتبار انتهاء تاريخ العقد تلقائياً) */
   function clientEffectiveStatus(c) {
     if (c.contractStatus === 'ended') return 'ended';
     if (c.contractStatus === 'paused') return 'paused';
+    if (c.contractStatus === 'pending') return 'pending';
     if (c.contractEnd && c.contractEnd < todayISO()) return 'ended';
     return 'active';
   }
@@ -869,6 +911,7 @@
     saveDue: saveDue, deleteDue: deleteDue, generateDuesForPeriod: generateDuesForPeriod,
     clientDuesOf: clientDuesOf, clientSummary: clientSummary,
     clientEffectiveStatus: clientEffectiveStatus, currentPeriod: currentPeriod,
+    computeFee: computeFee,
 
     channel: channel, channelName: channelName, entityName: entityName,
     query: query, totals: totals, byChannel: byChannel, byDay: byDay,
