@@ -621,6 +621,7 @@
   }
 
   function byDay(list, from, to) {
+    if (!from || !to) return [];   // فترة مفتوحة — لا يمكن بناء محور يومي بلا حدّين
     var map = {};
     list.forEach(function (e) {
       if (!map[e.date]) map[e.date] = [];

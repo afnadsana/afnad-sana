@@ -181,6 +181,15 @@
     var pr = prevRange(r);
     var prev = pr.open ? [] : S.query(pr.from, pr.to, state.entityId);
 
+    /* المحور اليومي يحتاج حدّين فعليين — نشتقّهما من البيانات في الفترات المفتوحة */
+    var span = r;
+    if (!r.from || !r.to) {
+      var ds = cur.map(function (e) { return e.date; }).sort();
+      span = ds.length
+        ? { from: ds[0], to: ds[ds.length - 1] }
+        : { from: S.todayISO(), to: S.todayISO() };
+    }
+
     var T = S.totals(cur), TP = S.totals(prev);
     var chCur = S.byChannel(cur), chPrev = S.byChannel(prev);
     var prevMap = {};
@@ -267,7 +276,7 @@
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
           '<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>' +
           'الصرف والمبيعات عبر الفترة</h3></div>' +
-          '<div class="panel-body">' + C.line(S.byDay(cur, r.from, r.to)) + '</div>' +
+          '<div class="panel-body">' + C.line(S.byDay(cur, span.from, span.to)) + '</div>' +
         '</div>' +
       '</div>';
 
