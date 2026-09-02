@@ -17,6 +17,9 @@
     to: null,
     month: null,        // شهر محدد YYYY-MM عند preset='month'
     year: null,         // سنة محددة YYYY عند preset='year'
+    clientMonth: null,      // شهر لوحة متابعة العملاء (YYYY-MM-01)
+    clientPayFilter: 'all', // تصفية حالة السداد في اللوحة الشهرية
+    clientShowArchive: false,
     invDir: 'all',      // تصفية الفواتير: الكل / وارد / صادر
     invStatus: 'all',   // تصفية الفواتير: الكل / مسدّدة / معلّقة
     taxYear: S.todayISO().slice(0, 4)
@@ -1289,58 +1292,254 @@
     return '<span class="tag" style="background:' + colors[0] + ';color:' + colors[1] + '">' + text + '</span>';
   }
 
+  /* ---------- متابعة العملاء: لوحة شهرية ---------- */
   function viewClients() {
+    var period = state.clientMonth || S.currentPeriod();
+    var ym = period.slice(0, 7);
+    var year = ym.slice(0, 4);
     var clients = S.db.clients;
-    var rows = clients.map(function (c) {
-      var s = S.clientSummary(c);
+
+    /* شريط الأشهر — كل شهور السنة، والشهور القادمة معطّلة بصرياً */
+    var today = S.todayISO();
+    var monthChips = '';
+    for (var m = 1; m <= 12; m++) {
+      var mk = year + '-' + String(m).padStart(2, '0');
+      var isFuture = mk > today.slice(0, 7);
+      var n = clients.filter(function (c) { return S.clientActiveInPeriod(c, mk + '-01'); }).length;
+      monthChips += '<button class="chip' + (mk === ym ? ' active' : '') +
+        (isFuture ? ' chip-future' : '') + '" data-cl-month="' + mk + '-01">' +
+        F.MONTHS[m - 1] + (n ? '<span class="chip-n">' + n + '</span>' : '') + '</button>';
+    }
+
+    var years = {};
+    clients.forEach(function (c) { if (c.contractStart) years[c.contractStart.slice(0, 4)] = 1; });
+    years[S.todayISO().slice(0, 4)] = 1;
+    var yearChips = Object.keys(years).sort().map(function (y) {
+      return '<button class="chip' + (y === year ? ' active' : '') + '" data-cl-year="' + y + '">' + y + '</button>';
+    }).join('');
+
+    /* تقسيم الجهات: سارية في هذا الشهر ← اللوحة، وغيرها ← الأرشيف */
+    var live = [], archived = [];
+    clients.forEach(function (c) {
+      (S.clientActiveInPeriod(c, period) ? live : archived).push(c);
+    });
+
+    var filt = state.clientPayFilter || 'all';
+    var totDue = 0, totPaid = 0, cnt = { paid: 0, partial: 0, unpaid: 0, none: 0 };
+
+    var liveRows = live.map(function (c) {
+      var d = S.dueOf(c.id, period);
+      var st = S.dueState(d);
+      cnt[st]++;
+      var due = d ? d.amountDue : 0, paid = d ? d.amountPaid : 0;
+      totDue += due; totPaid += paid;
+      var rest = Math.round((due - paid) * 100) / 100;
+      if (filt !== 'all' && filt !== st) return '';
+
+      var expected = c.feeType === 'fixed' ? S.computeFee(c, 0).total : 0;
+      return '<tr>' +
+        '<td style="font-weight:600">' + F.esc(c.name) +
+          '<span class="hint" style="display:block">' + F.esc(feeDesc(c)) + '</span></td>' +
+        '<td class="num">' + (d ? F.money(due)
+          : '<span style="color:var(--muted)">— ' +
+            (expected > 0 ? '<span class="hint">متوقع ' + F.money(expected) + '</span>' : '') + '</span>') + '</td>' +
+        '<td class="num">' + (d ? F.money(paid) : '—') + '</td>' +
+        '<td class="num" style="font-weight:700;color:' +
+          (rest > 0 ? 'var(--red)' : d ? 'var(--green)' : 'var(--muted)') + '">' +
+          (d ? F.money(rest) : '—') + '</td>' +
+        '<td>' + badge(DUE_LABEL[st], DUE_COLOR[st]) + '</td>' +
+        '<td><div class="t-actions">' +
+          '<button class="btn btn-sm btn-primary" data-pay="' + c.id + '">' +
+            (d ? 'تحديث السداد' : 'تسجيل المستحق') + '</button>' +
+          '<button class="btn btn-sm" data-client-detail="' + c.id + '">كل الشهور</button>' +
+        '</div></td></tr>';
+    }).join('');
+
+    var archRows = archived.map(function (c) {
+      var why = c.contractStatus === 'pending' ? 'قيد توقيع العقد'
+        : c.contractStatus === 'paused' ? 'موقوف مؤقتاً'
+        : c.contractStart && c.contractStart > S.periodEnd(period)
+          ? 'يبدأ ' + F.arMonth(c.contractStart.slice(0, 7))
+          : 'انتهى العقد';
       return '<tr>' +
         '<td style="font-weight:600">' + F.esc(c.name) + '</td>' +
-        '<td>' + badge(STATUS_LABEL[s.effectiveStatus], STATUS_COLOR[s.effectiveStatus]) + '</td>' +
-        '<td>' + badge(DUE_LABEL[s.currentStatus], DUE_COLOR[s.currentStatus]) + '</td>' +
-        '<td class="num" style="font-weight:700;color:' + (s.overdue > 0 ? 'var(--red)' : 'var(--muted)') + '">' +
-          (s.overdue > 0 ? F.money(s.overdue) + ' ر.س' : '—') +
-          (s.overdueCount > 0 ? '<span class="hint" style="display:block">' + s.overdueCount + ' شهر متأخر</span>' : '') +
-        '</td>' +
-        '<td><span class="num">' + F.esc(feeDesc(c)) + '</span>' +
-          (c.feeType && c.feeType !== 'fixed'
-            ? '<span class="hint" style="display:block">' + FEE_LABEL[c.feeType] + '</span>' : '') +
-        '</td>' +
+        '<td>' + badge(STATUS_LABEL[S.clientEffectiveStatus(c)], STATUS_COLOR[S.clientEffectiveStatus(c)]) + '</td>' +
+        '<td><span class="hint">' + F.esc(why) + '</span></td>' +
+        '<td class="num">' + (c.contractStart ? F.arDate(c.contractStart) : '—') + '</td>' +
         '<td><div class="t-actions">' +
-          '<button class="btn btn-sm" data-client-detail="' + c.id + '">تفاصيل</button>' +
+          '<button class="btn btn-sm" data-client-detail="' + c.id + '">كل الشهور</button>' +
+          '<button class="btn btn-sm" data-edit-client="' + c.id + '">تعديل</button>' +
           '<button class="btn btn-sm btn-danger" data-client-del="' + c.id + '">حذف</button>' +
         '</div></td></tr>';
     }).join('');
 
-    var totalOverdue = clients.reduce(function (a, c) { return a + S.clientSummary(c).overdue; }, 0);
-    var activeCount = clients.filter(function (c) { return S.clientSummary(c).effectiveStatus === 'active'; }).length;
+    var payChips = [['all', 'الكل'], ['unpaid', 'لم يُسدَّد'], ['partial', 'جزئي'],
+                    ['paid', 'مسدَّد'], ['none', 'بلا مستحق']].map(function (x) {
+      var n = x[0] === 'all' ? live.length : cnt[x[0]];
+      return '<button class="chip' + (filt === x[0] ? ' active' : '') + '" data-cl-filter="' + x[0] + '">' +
+             x[1] + (n ? '<span class="chip-n">' + n + '</span>' : '') + '</button>';
+    }).join('');
+
+    var showArch = !!state.clientShowArchive;
+    var restTot = Math.round((totDue - totPaid) * 100) / 100;
 
     return '<div class="page-head"><div>' +
              '<h2>متابعة العملاء</h2>' +
-             '<p>الجهات التي تدفع اشتراكاً شهرياً — حالة العقد والسداد والمتأخرات</p>' +
+             '<p>لوحة شهرية — اختر الشهر لترى مستحق كل جهة وحالة سدادها فيه</p>' +
            '</div><div style="display:flex;gap:8px;flex-wrap:wrap">' +
-             '<button class="btn" data-gen-dues>توليد مستحقات ' + F.arMonth(S.currentPeriod().slice(0, 7)) + '</button>' +
+             '<button class="btn" data-gen-dues>توليد مستحقات ' + F.arMonth(ym) + '</button>' +
              '<button class="btn btn-primary" data-add-client>' +
                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-               '<path d="M12 5v14M5 12h14"/></svg>عميل جديد</button>' +
+               '<path d="M12 5v14M5 12h14"/></svg>جهة جديدة</button>' +
            '</div></div>' +
-           '<div class="grid grid-3 mb">' +
-             kpiCard('عدد العملاء النشطين', F.int(activeCount), 'من إجمالي ' + clients.length + ' عميل',
+
+           '<div class="filterbar">' + (Object.keys(years).length > 1 ? yearChips + '<span class="fb-sep"></span>' : '') +
+             monthChips + '</div>' +
+
+           '<div class="grid grid-4 mb">' +
+             kpiCard('مستحق ' + F.arMonth(ym), F.money(totDue) + ' ر.س',
+                     live.length + ' جهة سارية هذا الشهر', 'money', { v: 0, dir: 'flat' }) +
+             kpiCard('المحصَّل', F.money(totPaid) + ' ر.س', 'ما تم سداده من مستحق الشهر',
                      'cart', { v: 0, dir: 'flat' }) +
-             kpiCard('إجمالي المتأخرات', F.money(totalOverdue) + ' ر.س', 'مجموع كل الأشهر غير المسدّدة بالكامل',
-                     'money', { v: 0, dir: 'flat' }) +
-             kpiCard('الشهر الحالي', F.arMonth(S.currentPeriod().slice(0, 7)), 'اضغط «توليد مستحقات» لإنشاء مستحقات الشهر',
+             kpiCard('المتبقي', F.money(restTot) + ' ر.س', 'غير المسدَّد من هذا الشهر',
                      'trend', { v: 0, dir: 'flat' }) +
+             kpiCard('في الأرشيف', F.int(archived.length), 'عقود غير سارية في هذا الشهر',
+                     'pct', { v: 0, dir: 'flat' }) +
            '</div>' +
-           '<div class="panel"><div class="table-wrap"><table><thead><tr>' +
-             '<th>الجهة</th><th>حالة العقد</th><th>حالة الشهر الحالي</th><th>المتأخر</th>' +
-             '<th>الأتعاب</th><th></th>' +
+
+           '<div class="panel mb"><div class="panel-head">' +
+             '<h3>' + F.arMonth(ym) + ' — الجهات السارية</h3>' +
+             '<div style="display:flex;gap:6px;flex-wrap:wrap">' + payChips + '</div>' +
+           '</div><div class="table-wrap"><table><thead><tr>' +
+             '<th>الجهة</th><th>المستحق</th><th>المسدَّد</th><th>المتبقي</th><th>الحالة</th><th></th>' +
            '</tr></thead><tbody>' +
-           (clients.length ? rows : '<tr><td colspan="6"><div class="empty">' +
-             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">' +
-             '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>' +
-             '<h4>لا يوجد عملاء بعد</h4><p>أضف أول جهة تدفع لك اشتراكاً شهرياً.</p>' +
-             '<button class="btn btn-primary" data-add-client>إضافة عميل</button></div></td></tr>') +
-           '</tbody></table></div></div>';
+           (live.length && liveRows ? liveRows
+             : '<tr><td colspan="6">' + C.empty(live.length
+                 ? 'لا توجد جهات تطابق هذه التصفية'
+                 : 'لا توجد جهات سارية في ' + F.arMonth(ym)) + '</td></tr>') +
+           '</tbody></table></div></div>' +
+
+           '<div class="panel"><div class="panel-head">' +
+             '<h3>الأرشيف (' + archived.length + ')</h3>' +
+             '<button class="btn btn-sm" data-cl-arch>' +
+               (showArch ? 'إخفاء الأرشيف' : 'إظهار الأرشيف') + '</button>' +
+           '</div>' +
+           (showArch
+             ? '<div class="table-wrap"><table><thead><tr>' +
+                 '<th>الجهة</th><th>الحالة</th><th>السبب</th><th>بداية العقد</th><th></th>' +
+               '</tr></thead><tbody>' +
+               (archived.length ? archRows
+                 : '<tr><td colspan="5">' + C.empty('الأرشيف فارغ') + '</td></tr>') +
+               '</tbody></table></div>'
+             : '<div class="panel-body"><p class="hint">' + archived.length +
+               ' جهة غير سارية في ' + F.arMonth(ym) +
+               ' (لم تبدأ بعد، أو موقوفة، أو منتهية، أو قيد توقيع العقد).</p></div>') +
+           '</div>';
+  }
+
+  /* نافذة سريعة: كم المستحق؟ وهل تم السداد؟ — لجهة وشهر محددين */
+  function payDueForm(clientId, period) {
+    var c = S.db.clients.find(function (x) { return x.id === clientId; });
+    if (!c) return;
+    var d = S.dueOf(c.id, period);
+    var computed = c.feeType && c.feeType !== 'fixed';
+    var defAmount = d ? d.amountDue : (computed ? '' : S.computeFee(c, 0).total);
+    var st = S.dueState(d);
+    var stateVal = st === 'paid' ? 'full' : st === 'partial' ? 'partial' : 'no';
+
+    var body =
+      '<div class="form-grid">' +
+        '<div class="field full"><label>' + F.esc(c.name) + ' — ' + F.arMonth(period.slice(0, 7)) + '</label>' +
+          '<span class="hint">نموذج الأتعاب: ' + F.esc(feeDesc(c)) + '</span></div>' +
+        (computed
+          ? field('إيراد الشهر (ر.س)',
+              '<input type="number" id="p_rev" min="0" step="0.01" value="' +
+              (d && d.revenueBase ? d.revenueBase : '') + '" placeholder="0.00">',
+              'أدخل الإيراد المحقق ويُحسب المستحق تلقائياً')
+          : '') +
+        field('كم المستحق؟ (شامل الضريبة)',
+          '<input type="number" id="p_amount" min="0" step="0.01" value="' + defAmount + '">') +
+        '<div class="field"><label>هل تم السداد؟</label><select id="p_state">' +
+          '<option value="no"' + (stateVal === 'no' ? ' selected' : '') + '>لا — لم يُسدَّد</option>' +
+          '<option value="full"' + (stateVal === 'full' ? ' selected' : '') + '>نعم — بالكامل</option>' +
+          '<option value="partial"' + (stateVal === 'partial' ? ' selected' : '') + '>سداد جزئي</option>' +
+        '</select></div>' +
+        '<div class="field" id="p_wrap_paid"><label>المبلغ المسدَّد (ر.س)</label>' +
+          '<input type="number" id="p_paid" min="0" step="0.01" value="' + (d ? d.amountPaid : 0) + '"></div>' +
+        '<div class="field" id="p_wrap_date"><label>تاريخ السداد</label>' +
+          dateField('p_date', d && d.paidDate ? d.paidDate : '') + '</div>' +
+        '<div class="field full"><label>ملاحظة</label>' +
+          '<input id="p_note" value="' + F.esc(d ? d.note : '') + '" placeholder="اختياري"></div>' +
+        '<div class="field full" id="p_prev" style="background:var(--bg);padding:12px;border-radius:10px"></div>' +
+      '</div>';
+
+    openModal('سداد ' + F.arMonth(period.slice(0, 7)), body,
+      '<button class="btn btn-primary" id="modalSave">حفظ</button>' +
+      (d ? '<button class="btn btn-danger" id="p_del">حذف مستحق الشهر</button>' : '') +
+      '<button class="btn" data-close>إلغاء</button>',
+      function () {
+        var amount = parseFloat($('#p_amount').value) || 0;
+        if (!(amount > 0)) { toast('أدخل المستحق', true); return; }
+        var sv = $('#p_state').value;
+        var paid = sv === 'full' ? amount : sv === 'no' ? 0 : (parseFloat($('#p_paid').value) || 0);
+        if (paid > amount) { toast('المبلغ المسدَّد أكبر من المستحق', true); return; }
+        var pd = fromDisplayDate($('#p_date').value);
+        if (sv !== 'no' && !pd) pd = S.todayISO();
+        closeModal();
+        run(function () {
+          return S.saveDue({
+            clientId: c.id, period: period,
+            amountDue: amount, amountPaid: paid,
+            revenueBase: computed ? (parseFloat($('#p_rev') && $('#p_rev').value) || 0) : 0,
+            paidDate: sv === 'no' ? null : pd,
+            note: $('#p_note').value
+          });
+        }, 'تم حفظ سداد ' + F.arMonth(period.slice(0, 7)));
+      });
+
+    function sync() {
+      var sv = $('#p_state').value;
+      var amount = parseFloat($('#p_amount').value) || 0;
+      if (computed) {
+        var rev = parseFloat($('#p_rev').value) || 0;
+        if (rev > 0) {
+          var f = S.computeFee(c, rev);
+          $('#p_amount').value = f.total.toFixed(2);
+          amount = f.total;
+        }
+      }
+      $('#p_wrap_paid').style.display = sv === 'partial' ? '' : 'none';
+      $('#p_wrap_date').style.display = sv === 'no' ? 'none' : '';
+      if (sv === 'full') $('#p_paid').value = amount.toFixed(2);
+      if (sv === 'no') $('#p_paid').value = '0';
+      var paid = sv === 'full' ? amount : sv === 'no' ? 0 : (parseFloat($('#p_paid').value) || 0);
+      var rest = Math.round((amount - paid) * 100) / 100;
+      $('#p_prev').innerHTML = '<div style="font-size:12.5px">المستحق <strong class="num">' +
+        F.money(amount) + '</strong> · المسدَّد <strong class="num">' + F.money(paid) +
+        '</strong> · المتبقي <strong class="num" style="color:' +
+        (rest > 0 ? 'var(--red)' : 'var(--green)') + '">' + F.money(rest) + ' ر.س</strong></div>';
+    }
+    $('#modalBody').onchange = sync;
+    ['p_amount', 'p_paid'].forEach(function (id) { $('#' + id).addEventListener('input', sync); });
+    if (computed) $('#p_rev').addEventListener('input', sync);
+    sync();
+
+    $('#modalBody').onclick = function (ev) {
+      var dp = ev.target.closest('[data-dp]');
+      if (dp) {
+        var nat = $('#' + dp.dataset.dp + '_n');
+        if (nat.showPicker) { try { nat.showPicker(); } catch (e) { nat.focus(); } }
+        else { nat.focus(); nat.click(); }
+      }
+    };
+    if (d) {
+      $('#p_del').onclick = function () {
+        closeModal();
+        confirmBox('حذف مستحق ' + F.arMonth(period.slice(0, 7)) + ' لهذه الجهة؟', function () {
+          run(function () { return S.deleteDue(d.id); }, 'تم الحذف');
+        });
+      };
+    }
   }
 
   function clientForm(existing) {
@@ -2012,6 +2211,30 @@
 
     /* ---------- متابعة العملاء ---------- */
     if (t.closest('[data-add-client]')) { clientForm(null); return; }
+
+    var cm = t.closest('[data-cl-month]');
+    if (cm) { state.clientMonth = cm.dataset.clMonth; render(); return; }
+    var cy = t.closest('[data-cl-year]');
+    if (cy) {
+      var curM = (state.clientMonth || S.currentPeriod()).slice(5, 7);
+      state.clientMonth = cy.dataset.clYear + '-' + curM + '-01';
+      render(); return;
+    }
+    var cf = t.closest('[data-cl-filter]');
+    if (cf) { state.clientPayFilter = cf.dataset.clFilter; render(); return; }
+    if (t.closest('[data-cl-arch]')) {
+      state.clientShowArchive = !state.clientShowArchive; render(); return;
+    }
+    var pay = t.closest('[data-pay]');
+    if (pay) { payDueForm(pay.dataset.pay, state.clientMonth || S.currentPeriod()); return; }
+
+    var ced = t.closest('[data-edit-client]');
+    if (ced && !t.closest('#modalFoot')) {
+      var ce = S.db.clients.find(function (x) { return x.id === ced.dataset.editClient; });
+      if (ce) clientForm(ce);
+      return;
+    }
+
     var cdt = t.closest('[data-client-detail]');
     if (cdt) { openClientDetail(cdt.dataset.clientDetail); return; }
     var cdl = t.closest('[data-client-del]');
@@ -2022,9 +2245,10 @@
       return;
     }
     if (t.closest('[data-gen-dues]')) {
+      var genPeriod = state.clientMonth || S.currentPeriod();
       try {
-        var n = await S.generateDuesForPeriod(S.currentPeriod());
-        toast(n > 0 ? 'تم توليد ' + n + ' مستحق جديد' : 'كل العملاء النشطين لديهم مستحق لهذا الشهر بالفعل');
+        var n = await S.generateDuesForPeriod(genPeriod);
+        toast(n > 0 ? 'تم توليد ' + n + ' مستحق جديد' : 'كل الجهات السارية لديها مستحق لهذا الشهر بالفعل');
         render();
       } catch (genErr) { toast(genErr.message || 'تعذّر التوليد', true); }
       return;

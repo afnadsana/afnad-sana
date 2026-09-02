@@ -505,17 +505,20 @@
     requireWrite();
     period = periodOf(period);
     var active = db.clients.filter(function (c) {
-      if (c.contractStatus !== 'active') return false;
-      if (c.contractEnd && c.contractEnd < period) return false;
+      // يحترم بداية العقد ونهايته، فلا يولّد مستحقاً لشهر سابق لتعاقد الجهة
+      if (!clientActiveInPeriod(c, period)) return false;
       // الأتعاب المحسوبة من الإيراد تحتاج إدخال إيراد الشهر يدوياً، فلا تُولَّد تلقائياً
       if (c.feeType && c.feeType !== 'fixed') return false;
       if (c.monthlyAmount <= 0) return false;
-      var has = db.clientDues.some(function (x) { return x.clientId === c.id && x.period === period; });
-      return !has;
+      return !dueOf(c.id, period);
     });
     var created = 0;
     for (var i = 0; i < active.length; i++) {
-      await saveDue({ clientId: active[i].id, period: period, amountDue: active[i].monthlyAmount, amountPaid: 0 });
+      // المبلغ الشهري مُخزَّن قبل الضريبة، والمستحق يُسجَّل شاملاً لها
+      await saveDue({
+        clientId: active[i].id, period: period,
+        amountDue: computeFee(active[i], 0).total, amountPaid: 0
+      });
       created++;
     }
     return created;
@@ -549,6 +552,44 @@
     base = Math.round(base * 100) / 100;
     var vat = Math.round(base * rate * 100) / 100;
     return { base: base, vat: vat, total: Math.round((base + vat) * 100) / 100 };
+  }
+
+  /** آخر يوم في شهر الفترة (period = YYYY-MM-01) */
+  function periodEnd(period) {
+    var p = period.slice(0, 7).split('-');
+    return iso(new Date(+p[0], +p[1], 0));
+  }
+
+  /**
+   * هل عقد الجهة ساري خلال هذا الشهر تحديداً؟
+   * يعتمد على تاريخ بداية العقد ونهايته وحالته — فلا تظهر الجهة
+   * في أشهر سابقة لبداية تعاقدها.
+   */
+  function clientActiveInPeriod(c, period) {
+    if (c.contractStatus === 'pending') return false;
+    if (c.contractStatus === 'paused') return false;
+    var start = period.slice(0, 8) + '01';
+    var end = periodEnd(period);
+    if (c.contractStart && c.contractStart > end) return false;   // لم يبدأ بعد
+    if (c.contractEnd && c.contractEnd < start) return false;      // انتهى قبل الشهر
+    if (c.contractStatus === 'ended' && !c.contractEnd) return false;
+    return true;
+  }
+
+  /** مستحق جهة معيّنة لشهر معيّن (أو null) */
+  function dueOf(clientId, period) {
+    var p = periodOf(period);
+    return db.clientDues.find(function (x) {
+      return x.clientId === clientId && x.period.slice(0, 10) === p;
+    }) || null;
+  }
+
+  /** حالة سداد شهر: paid / partial / unpaid / none */
+  function dueState(d) {
+    if (!d) return 'none';
+    if (d.amountDue > 0 && d.amountPaid >= d.amountDue) return 'paid';
+    if (d.amountPaid > 0) return 'partial';
+    return 'unpaid';
   }
 
   /** هل العقد ساري فعلياً؟ (يأخذ بعين الاعتبار انتهاء تاريخ العقد تلقائياً) */
@@ -911,7 +952,8 @@
     saveDue: saveDue, deleteDue: deleteDue, generateDuesForPeriod: generateDuesForPeriod,
     clientDuesOf: clientDuesOf, clientSummary: clientSummary,
     clientEffectiveStatus: clientEffectiveStatus, currentPeriod: currentPeriod,
-    computeFee: computeFee,
+    computeFee: computeFee, clientActiveInPeriod: clientActiveInPeriod,
+    dueOf: dueOf, dueState: dueState, periodEnd: periodEnd, periodOf: periodOf,
 
     channel: channel, channelName: channelName, entityName: entityName,
     query: query, totals: totals, byChannel: byChannel, byDay: byDay,
