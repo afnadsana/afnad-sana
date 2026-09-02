@@ -210,6 +210,15 @@ svg{width:18px;height:18px;flex:none}
   color:var(--text);font-size:13px;
 }
 .date-range input:focus{outline:2px solid var(--brand-50);border-color:var(--brand)}
+.date-range select{
+  border:1px solid var(--line);border-radius:9px;padding:7px 10px;background:#fff;
+  color:var(--text);font-size:13px;font-weight:600;cursor:pointer;
+}
+.date-range select:focus{outline:2px solid var(--brand-50);border-color:var(--brand)}
+.range-label{
+  font-size:12.5px;font-weight:700;color:var(--text);background:var(--bg);
+  border:1px solid var(--line);border-radius:9px;padding:7px 11px;white-space:nowrap;
+}
 
 /* ================= الشبكات ================= */
 .grid{display:grid;gap:14px}

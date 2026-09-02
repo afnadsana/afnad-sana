@@ -15,6 +15,8 @@
     preset: 'thisMonth',
     from: null,
     to: null,
+    month: null,        // شهر محدد YYYY-MM عند preset='month'
+    year: null,         // سنة محددة YYYY عند preset='year'
     invDir: 'all',      // تصفية الفواتير: الكل / وارد / صادر
     invStatus: 'all',   // تصفية الفواتير: الكل / مسدّدة / معلّقة
     taxYear: S.todayISO().slice(0, 4)
@@ -30,11 +32,50 @@
       case 'today':     return { from: today, to: today };
       case 'yesterday': return { from: S.addDays(today, -1), to: S.addDays(today, -1) };
       case 'last7':     return { from: S.addDays(today, -6), to: today };
+      case 'last30':    return { from: S.addDays(today, -29), to: today };
       case 'thisMonth': return { from: S.iso(new Date(y, m, 1)), to: today };
       case 'prevMonth': return { from: S.iso(new Date(y, m - 1, 1)), to: S.iso(new Date(y, m, 0)) };
+      case 'thisQuarter':
+        var q0 = Math.floor(m / 3) * 3;
+        return { from: S.iso(new Date(y, q0, 1)), to: S.iso(new Date(y, q0 + 3, 0)) };
+      case 'thisYear':  return { from: y + '-01-01', to: y + '-12-31' };
+      case 'prevYear':  return { from: (y - 1) + '-01-01', to: (y - 1) + '-12-31' };
+      case 'all':       return { from: null, to: null };
+      case 'month':
+        if (state.month) {
+          var pm = state.month.split('-'), my = +pm[0], mm = +pm[1] - 1;
+          return { from: S.iso(new Date(my, mm, 1)), to: S.iso(new Date(my, mm + 1, 0)) };
+        }
+        return { from: S.iso(new Date(y, m, 1)), to: today };
+      case 'year':
+        if (state.year) return { from: state.year + '-01-01', to: state.year + '-12-31' };
+        return { from: y + '-01-01', to: y + '-12-31' };
       case 'custom':    return { from: state.from, to: state.to };
       default:          return { from: S.iso(new Date(y, m, 1)), to: today };
     }
+  }
+
+  /* الفترة السابقة — تتحمّل الفترات المفتوحة (كل الفترات) */
+  function prevRange(r) {
+    if (!r.from || !r.to) return { from: null, to: null, days: 0, open: true };
+    return S.previousRange(r.from, r.to);
+  }
+
+  /* الأشهر والسنوات الموجودة فعلاً في البيانات */
+  function dataPeriods() {
+    var mo = {}, yr = {};
+    function scan(list) {
+      list.forEach(function (x) {
+        if (!x.date) return;
+        mo[x.date.slice(0, 7)] = 1;
+        yr[x.date.slice(0, 4)] = 1;
+      });
+    }
+    scan(S.db.invoices); scan(S.db.entries);
+    return {
+      months: Object.keys(mo).sort().reverse(),
+      years: Object.keys(yr).sort().reverse()
+    };
   }
 
   /* ---------- التنبيهات ---------- */
@@ -89,9 +130,31 @@
   function filterbarHTML() {
     var r = computeRange();
     var presets = [
-      ['today', 'اليوم'], ['yesterday', 'أمس'], ['last7', 'آخر 7 أيام'],
-      ['thisMonth', 'الشهر الحالي'], ['prevMonth', 'الشهر السابق']
+      ['today', 'اليوم'], ['yesterday', 'أمس'], ['last7', 'آخر 7 أيام'], ['last30', 'آخر 30 يوم'],
+      ['thisMonth', 'الشهر الحالي'], ['prevMonth', 'الشهر السابق'], ['thisQuarter', 'الربع الحالي'],
+      ['thisYear', 'هذا العام'], ['prevYear', 'العام السابق'], ['all', 'كل الفترات']
     ];
+    var P = dataPeriods();
+
+    var monthSel = '<select id="jumpMonth" title="انتقل إلى شهر محدد">' +
+      '<option value="">شهر محدد…</option>' +
+      P.months.map(function (ym) {
+        return '<option value="' + ym + '"' +
+               (state.preset === 'month' && state.month === ym ? ' selected' : '') + '>' +
+               F.arMonth(ym) + '</option>';
+      }).join('') + '</select>';
+
+    var yearSel = '<select id="jumpYear" title="انتقل إلى سنة كاملة">' +
+      '<option value="">سنة كاملة…</option>' +
+      P.years.map(function (y) {
+        return '<option value="' + y + '"' +
+               (state.preset === 'year' && state.year === y ? ' selected' : '') + '>' + y + '</option>';
+      }).join('') + '</select>';
+
+    var label = r.from && r.to
+      ? F.arDate(r.from) + ' — ' + F.arDate(r.to)
+      : 'كل السجل';
+
     return '<div class="filterbar">' +
       presets.map(function (p) {
         return '<button class="chip' + (state.preset === p[0] ? ' active' : '') +
@@ -99,9 +162,11 @@
       }).join('') +
       '<span class="spacer"></span>' +
       '<div class="date-range">' +
-        '<input type="date" id="fromDate" value="' + (r.from || '') + '">' +
+        '<span class="range-label num">' + label + '</span>' +
+        monthSel + yearSel +
+        '<input type="date" lang="en-GB" id="fromDate" value="' + (r.from || '') + '">' +
         '<span>إلى</span>' +
-        '<input type="date" id="toDate" value="' + (r.to || '') + '">' +
+        '<input type="date" lang="en-GB" id="toDate" value="' + (r.to || '') + '">' +
         '<button class="btn btn-primary btn-sm" id="applyRange">تطبيق</button>' +
       '</div>' +
     '</div>';
@@ -113,8 +178,8 @@
   function viewDashboard() {
     var r = computeRange();
     var cur = S.query(r.from, r.to, state.entityId);
-    var pr = S.previousRange(r.from, r.to);
-    var prev = S.query(pr.from, pr.to, state.entityId);
+    var pr = prevRange(r);
+    var prev = pr.open ? [] : S.query(pr.from, pr.to, state.entityId);
 
     var T = S.totals(cur), TP = S.totals(prev);
     var chCur = S.byChannel(cur), chPrev = S.byChannel(prev);
@@ -243,8 +308,10 @@
 
     return '<div class="page-head"><div>' +
              '<h2>لوحة الإدارة الرئيسية</h2>' +
-             '<p>أهم المؤشرات دون الدخول في التفاصيل — مقارنة بالفترة السابقة (' +
-               F.arDate(pr.from) + ' — ' + F.arDate(pr.to) + ')</p>' +
+             '<p>' + (pr.open
+               ? 'أهم المؤشرات لكامل السجل — لا توجد فترة سابقة للمقارنة'
+               : 'أهم المؤشرات دون الدخول في التفاصيل — مقارنة بالفترة السابقة (' +
+                 F.arDate(pr.from) + ' — ' + F.arDate(pr.to) + ')') + '</p>' +
            '</div>' +
            '<button class="btn btn-primary" data-add-entry>' +
              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
@@ -357,7 +424,7 @@
 
     var body =
       '<div class="form-grid">' +
-        field('التاريخ', '<input type="date" id="f_date" value="' + e.date + '" required>') +
+        field('التاريخ', '<input type="date" lang="en-GB" id="f_date" value="' + e.date + '" required>') +
         field('المنشأة', sel('f_entity', S.db.entities.map(function (x) {
           return [x.id, x.name]; }), e.entityId)) +
         field('القناة', sel('f_channel', S.db.channels.map(function (x) {
@@ -653,7 +720,7 @@
               '<input type="radio" name="invdir" value="in"' +
                 (v.dir === 'in' ? ' checked' : '') + '><span>▼ وارد — مبلغ دخل لي</span></label>' +
           '</div></div>' +
-        field('التاريخ', '<input type="date" id="v_date" value="' + v.date + '">') +
+        field('التاريخ', '<input type="date" lang="en-GB" id="v_date" value="' + v.date + '">') +
         field('المبلغ (ر.س)',
           '<input type="number" id="v_amount" min="0" step="0.01" value="' + v.amount + '" placeholder="0.00">') +
         field('الجهة (المورد / العميل)',
@@ -1052,7 +1119,7 @@
         '</div></div>' +
         '<div class="panel"><div class="panel-head"><h3>ضريبة القيمة المضافة</h3></div><div class="panel-body">' +
           '<div class="field" style="margin-bottom:12px"><label>تاريخ التسجيل الضريبي</label>' +
-            '<input type="date" id="setVatDate" value="' + (s.vatRegistrationDate || '') + '">' +
+            '<input type="date" lang="en-GB" id="setVatDate" value="' + (s.vatRegistrationDate || '') + '">' +
             '<span class="hint">من هذا التاريخ فأحدث تُحتسب الضريبة افتراضياً على الفواتير الجديدة</span></div>' +
           '<div class="field"><label>نسبة الضريبة الافتراضية (%)</label>' +
             '<input type="number" id="setVatRate" min="0" max="100" step="0.1" value="' +
@@ -1239,8 +1306,8 @@
         field('ربط بمنشأة (اختياري)', sel('cl_entity',
           [['', '— بدون ربط —']].concat(S.db.entities.map(function (x) { return [x.id, x.name]; })),
           c.entityId || '')) +
-        field('بداية العقد', '<input type="date" id="cl_start" value="' + (c.contractStart || '') + '">') +
-        field('نهاية العقد', '<input type="date" id="cl_end" value="' + (c.contractEnd || '') + '">') +
+        field('بداية العقد', '<input type="date" lang="en-GB" id="cl_start" value="' + (c.contractStart || '') + '">') +
+        field('نهاية العقد', '<input type="date" lang="en-GB" id="cl_end" value="' + (c.contractEnd || '') + '">') +
         '<div class="field full"><label>ملاحظات</label>' +
           '<textarea id="cl_note" rows="2" placeholder="اختياري">' + F.esc(c.note || '') + '</textarea></div>' +
       '</div>';
@@ -1301,7 +1368,7 @@
           field('المبلغ المطلوب (ر.س)', '<input type="number" id="due_amount" min="0" step="0.01" value="' +
             c.monthlyAmount + '">') +
           field('المبلغ المدفوع (ر.س)', '<input type="number" id="due_paid" min="0" step="0.01" value="0">') +
-          field('تاريخ السداد', '<input type="date" id="due_paiddate" value="">') +
+          field('تاريخ السداد', '<input type="date" lang="en-GB" id="due_paiddate" value="">') +
           '<div class="field full"><button class="btn btn-primary" id="dueSaveBtn" type="button">حفظ المستحق</button></div>' +
         '</div>' : '') +
       '<div class="table-wrap"><table><thead><tr>' +
@@ -1441,6 +1508,20 @@
     $('#appRoot').hidden = true;
     showAuth();
   }
+
+  /* --- اختيار شهر أو سنة محددة (تفويض) --- */
+  $('#viewHost').addEventListener('change', function (e) {
+    if (e.target.id === 'jumpMonth') {
+      if (!e.target.value) return;
+      state.preset = 'month'; state.month = e.target.value;
+      render(); return;
+    }
+    if (e.target.id === 'jumpYear') {
+      if (!e.target.value) return;
+      state.preset = 'year'; state.year = e.target.value;
+      render(); return;
+    }
+  });
 
   /* --- أحداث المحتوى (تفويض) --- */
   $('#viewHost').addEventListener('click', async function (e) {
