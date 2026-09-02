@@ -6,21 +6,67 @@
   --brand:#4f46e5;
   --brand-600:#5b52ea;
   --brand-50:#eef0fe;
-  --bg:#f4f5fa;
+  --bg:#eef0f8;
   --card:#ffffff;
   --text:#1f2135;
   --muted:#8a8fa8;
-  --line:#ebecf3;
-  --green:#12b981;
-  --green-bg:#e7f8f2;
+  --line:#e6e8f2;
+  --green:#0fae79;
+  --green-bg:#e2f7ef;
   --red:#ef4360;
   --red-bg:#fdecef;
   --amber:#f59e0b;
+  --amber-bg:#fff4e0;
+  --amber-ink:#b06f00;
+  --cyan:#0ea5b7;
+  --cyan-bg:#e0f6f8;
+  --violet:#8b5cf6;
+  --violet-bg:#f0ebfe;
+  /* أسطح مشتقّة — تتبدّل مع الوضع الليلي */
+  --input-bg:#ffffff;
+  --hover:#f7f8fd;
+  --th-bg:#f6f7fc;
+  --line-strong:#d8d9e6;
+  --app-bg:radial-gradient(1200px 500px at 85% -8%, #e6e3fb 0%, transparent 60%), var(--bg);
   --r-lg:18px;
   --r-md:14px;
   --r-sm:10px;
   --shadow:0 1px 2px rgba(24,26,60,.04), 0 6px 18px rgba(24,26,60,.05);
   --shadow-lg:0 10px 40px rgba(24,26,60,.14);
+}
+
+/* ================= الوضع الليلي ================= */
+[data-theme="dark"]{
+  --indigo-900:#0d0e16;
+  --indigo-800:#141622;
+  --indigo-700:#252943;
+  --brand:#7b73f7;
+  --brand-600:#8a83f9;
+  --brand-50:#232449;
+  --bg:#0f1017;
+  --card:#181a25;
+  --text:#e9eaf4;
+  --muted:#8f94ae;
+  --line:#282b3b;
+  --green:#2ed3a2;
+  --green-bg:#123027;
+  --red:#f76b86;
+  --red-bg:#3b1c26;
+  --amber:#fbbf24;
+  --amber-bg:#3a2c10;
+  --amber-ink:#f5c76b;
+  --cyan:#2bc4d6;
+  --cyan-bg:#0e2e33;
+  --violet:#a78bfa;
+  --violet-bg:#251f42;
+  --input-bg:#1f2230;
+  --hover:#1e2130;
+  --th-bg:#161822;
+  --line-strong:#3a3e52;
+  --app-bg:radial-gradient(1200px 500px at 85% -8%, #1d1b3a 0%, transparent 60%), var(--bg);
+  --shadow:0 1px 2px rgba(0,0,0,.35), 0 6px 18px rgba(0,0,0,.28);
+  --shadow-lg:0 10px 40px rgba(0,0,0,.55);
+  color-scheme:dark;
 }
 
 *{box-sizing:border-box;margin:0;padding:0}
@@ -73,7 +119,7 @@ svg{width:18px;height:18px;flex:none}
   flex:1;padding:9px;border-radius:9px;font-size:13.5px;font-weight:600;
   color:var(--muted);transition:.15s;
 }
-.auth-tab.active{background:#fff;color:var(--text);box-shadow:var(--shadow)}
+.auth-tab.active{background:var(--card);color:var(--text);box-shadow:var(--shadow)}
 
 .auth-form{display:flex;flex-direction:column;gap:15px}
 .auth-submit{width:100%;padding:12px;font-size:14px;margin-top:4px}
@@ -149,7 +195,7 @@ svg{width:18px;height:18px;flex:none}
 .main{flex:1;min-width:0;display:flex;flex-direction:column}
 
 .topbar{
-  height:62px;flex:none;background:#fff;border-bottom:1px solid var(--line);
+  height:62px;flex:none;background:var(--card);border-bottom:1px solid var(--line);
   display:flex;align-items:center;justify-content:space-between;
   padding:0 22px;position:sticky;top:0;z-index:30;
 }
@@ -158,7 +204,7 @@ svg{width:18px;height:18px;flex:none}
 .select-wrap{position:relative;display:flex;align-items:center}
 .select-wrap .sel-ico{position:absolute;inset-inline-start:11px;width:15px;height:15px;color:var(--muted);pointer-events:none}
 .select-wrap select{
-  appearance:none;background:#fff;border:1px solid var(--line);
+  appearance:none;background:var(--input-bg);border:1px solid var(--line);
   border-radius:10px;padding:8px 34px 8px 30px;font-size:13px;font-weight:600;cursor:pointer;
 }
 .select-wrap::after{
@@ -172,7 +218,7 @@ svg{width:18px;height:18px;flex:none}
 .ghost-btn:hover{background:var(--bg);color:var(--text)}
 .only-mobile{display:none}
 
-.view-host{padding:22px;flex:1}
+.view-host{padding:22px;flex:1;background:var(--app-bg)}
 
 /* ================= رأس الصفحة ================= */
 .page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
@@ -186,7 +232,7 @@ svg{width:18px;height:18px;flex:none}
   background:var(--card);border:1px solid var(--line);color:var(--text);
   transition:.15s;white-space:nowrap;
 }
-.btn:hover{border-color:#d8d9e6;background:#fbfbfe}
+.btn:hover{border-color:var(--line-strong);background:var(--hover)}
 .btn svg{width:16px;height:16px}
 .btn-primary{background:var(--brand);border-color:var(--brand);color:#fff;box-shadow:0 4px 12px rgba(79,70,229,.25)}
 .btn-primary:hover{background:var(--brand-600);border-color:var(--brand-600)}
@@ -206,15 +252,68 @@ svg{width:18px;height:18px;flex:none}
 .filterbar .spacer{flex:1}
 .date-range{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
 .date-range input{
-  border:1px solid var(--line);border-radius:9px;padding:7px 10px;background:#fff;
+  border:1px solid var(--line);border-radius:9px;padding:7px 10px;background:var(--input-bg);
   color:var(--text);font-size:13px;
 }
 .date-range input:focus{outline:2px solid var(--brand-50);border-color:var(--brand)}
 .date-range select{
-  border:1px solid var(--line);border-radius:9px;padding:7px 10px;background:#fff;
+  border:1px solid var(--line);border-radius:9px;padding:7px 10px;background:var(--input-bg);
   color:var(--text);font-size:13px;font-weight:600;cursor:pointer;
 }
 .date-range select:focus{outline:2px solid var(--brand-50);border-color:var(--brand)}
+/* ================= زر الوضع الليلي ================= */
+.theme-btn{
+  width:38px;height:38px;border-radius:11px;display:grid;place-items:center;
+  border:1px solid var(--line);background:var(--input-bg);color:var(--muted);transition:.16s;
+}
+.theme-btn:hover{color:var(--brand);border-color:var(--brand);background:var(--brand-50)}
+.theme-btn .ico-sun{display:none}
+[data-theme="dark"] .theme-btn .ico-sun{display:block}
+[data-theme="dark"] .theme-btn .ico-moon{display:none}
+
+/* أسطح ما زالت فاتحة صراحةً — تُصحَّح في الوضع الليلي */
+[data-theme="dark"] .auth-card{background:var(--card)}
+[data-theme="dark"] .readonly-bar{background:var(--amber-bg);border-color:#5a4415;color:var(--amber-ink)}
+[data-theme="dark"] .pending-bar{background:var(--amber-bg);border-color:#5a4415}
+[data-theme="dark"] .summary{
+  background:linear-gradient(90deg,#2a1c26,#241b2c);border-color:#402b38;
+}
+[data-theme="dark"] .summary-ico{background:#4a2734;color:#ff9db0}
+[data-theme="dark"] .summary .pct{color:#ff9db0}
+[data-theme="dark"] .summary .pct-l,[data-theme="dark"] .summary-left .k{color:#c99aa9}
+[data-theme="dark"] .summary-left .v{color:#f0c3d0}
+[data-theme="dark"] .auth-msg{border-color:#5c2733}
+[data-theme="dark"] .auth-msg.ok{color:#5ee2b0;border-color:#1c4d3c}
+[data-theme="dark"] .btn-danger{border-color:#5c2733}
+[data-theme="dark"] .vat-bar{background:var(--card)}
+[data-theme="dark"] .ic{background:var(--input-bg)!important}
+
+/* ملاحظة المتعثرات أسفل الأرشيف */
+.arrears{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:14px 18px;border-top:1px solid var(--line);
+  background:linear-gradient(90deg,var(--red-bg),transparent);
+}
+.arrears-ico{
+  width:38px;height:38px;border-radius:11px;flex:none;display:grid;place-items:center;
+  background:var(--red);color:#fff;
+}
+.arrears-txt{flex:1;min-width:190px}
+.arrears-txt strong{display:block;font-size:13.5px}
+.arrears-txt span{font-size:12px;color:var(--muted)}
+.arrears-total{text-align:end}
+.arrears-total .k{display:block;font-size:11.5px;color:var(--muted)}
+.arrears-total .v{font-size:20px;font-weight:800;color:var(--red)}
+.arrears-list{
+  display:flex;gap:6px;flex-wrap:wrap;width:100%;
+  padding-top:4px;border-top:1px dashed var(--line);margin-top:2px;
+}
+.arrears-pill{
+  font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:20px;
+  background:var(--card);border:1px solid var(--line);
+}
+.arrears-pill b{color:var(--red);font-weight:800}
+
 /* شريط أشهر متابعة العملاء */
 .chip-n{
   display:inline-grid;place-items:center;min-width:17px;height:17px;padding:0 4px;
@@ -228,7 +327,7 @@ svg{width:18px;height:18px;flex:none}
 /* حقل تاريخ بأرقام لاتينية — نص ظاهر + حقل تاريخ أصلي مخفي للنافذة */
 .dpick{position:relative;display:inline-flex;align-items:center}
 .dpick .dp-text{
-  border:1px solid var(--line);border-radius:9px;padding:7px 32px 7px 10px;background:#fff;
+  border:1px solid var(--line);border-radius:9px;padding:7px 32px 7px 10px;background:var(--input-bg);
   color:var(--text);font-size:13px;width:120px;text-align:center;font-variant-numeric:tabular-nums;
 }
 .dpick .dp-text:focus{outline:2px solid var(--brand-50);border-color:var(--brand)}
@@ -279,8 +378,23 @@ svg{width:18px;height:18px;flex:none}
 /* ================= بطاقة مؤشر ================= */
 .kpi{
   background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);
-  padding:16px;box-shadow:var(--shadow);
+  padding:16px;box-shadow:var(--shadow);position:relative;overflow:hidden;
+  transition:transform .16s, box-shadow .16s;
 }
+/* شريط لوني علوي يميّز كل بطاقة مؤشر */
+.kpi::before{
+  content:"";position:absolute;inset-inline:0;top:0;height:3px;
+  background:linear-gradient(90deg,var(--brand),#7c6cf5);opacity:.9;
+}
+.kpi:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
+.kpi--money::before{background:linear-gradient(90deg,var(--green),#4ad6a8)}
+.kpi--cart::before {background:linear-gradient(90deg,var(--cyan),#5ad0dd)}
+.kpi--pct::before  {background:linear-gradient(90deg,var(--violet),#b79bff)}
+.kpi--trend::before{background:linear-gradient(90deg,var(--amber),#ffd27a)}
+.kpi--money .kpi-ico{background:var(--green-bg);color:var(--green)}
+.kpi--cart  .kpi-ico{background:var(--cyan-bg);color:var(--cyan)}
+.kpi--pct   .kpi-ico{background:var(--violet-bg);color:var(--violet)}
+.kpi--trend .kpi-ico{background:var(--amber-bg);color:var(--amber-ink)}
 .kpi-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .kpi-head .t{font-size:13px;color:var(--muted);font-weight:600}
 .kpi-ico{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--brand-50);color:var(--brand)}
@@ -395,7 +509,11 @@ svg{width:18px;height:18px;flex:none}
 
 /* ================= اللوحات والجداول ================= */
 .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow);overflow:hidden}
-.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.panel-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:15px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap;
+  background:linear-gradient(180deg,var(--th-bg),transparent);
+}
 .panel-head h3{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
 .panel-head h3 svg{width:16px;height:16px;color:var(--muted)}
 .panel-body{padding:18px}
@@ -404,11 +522,11 @@ svg{width:18px;height:18px;flex:none}
 table{width:100%;border-collapse:collapse;white-space:nowrap}
 th{
   text-align:start;font-size:12px;font-weight:700;color:var(--muted);
-  padding:11px 14px;background:#fafbfe;border-bottom:1px solid var(--line);
+  padding:11px 14px;background:var(--th-bg);border-bottom:1px solid var(--line);
 }
 td{padding:12px 14px;border-bottom:1px solid var(--line);font-size:13px}
 tbody tr:last-child td{border-bottom:none}
-tbody tr:hover{background:#fbfbfe}
+tbody tr:hover{background:var(--hover)}
 tfoot td{background:#fafbfe;font-weight:800;border-top:2px solid var(--line);border-bottom:none}
 .t-actions{display:flex;gap:6px}
 .tag{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
@@ -425,6 +543,9 @@ tfoot td{background:#fafbfe;font-weight:800;border-top:2px solid var(--line);bor
 .chart-scroll{overflow-x:auto}
 .linechart{width:100%;min-width:420px;height:auto;display:block}
 .linechart .hot{cursor:crosshair}
+/* محاور وشبكة الرسم — تتبع الوضع الحالي */
+svg text.ax{fill:var(--muted);font-size:10.5px}
+svg line.grid-l{stroke:var(--line)}
 
 .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px}
 .legend span{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}

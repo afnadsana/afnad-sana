@@ -142,8 +142,8 @@
     var ticks = 4, grid = '', axis = '';
     for (var t = 0; t <= ticks; t++) {
       var gv = (maxV / ticks) * t, gy = y(gv);
-      grid += '<line x1="' + PL + '" y1="' + gy + '" x2="' + (W - PR) + '" y2="' + gy +
-              '" stroke="#eceef5" stroke-width="1"/>';
+      grid += '<line class="grid-l" x1="' + PL + '" y1="' + gy + '" x2="' + (W - PR) + '" y2="' + gy +
+              '" stroke-width="1"/>';
       axis += '<text x="' + (W - PR + 6) + '" y="' + (gy + 4) +
               '" class="ax" text-anchor="start">' + compact(gv) + '</text>';
     }

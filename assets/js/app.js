@@ -373,7 +373,7 @@
       trend: '<path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/>'
     };
     var good = d.dir === 'flat' ? 'flat' : (lowerIsBetter ? (d.dir === 'down' ? 'up' : 'down') : d.dir);
-    return '<div class="kpi">' +
+    return '<div class="kpi kpi--' + ico + '">' +
       '<div class="kpi-head"><span class="t">' + title + '</span>' +
         '<span class="kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
         'stroke-width="2" stroke-linecap="round">' + icons[ico] + '</svg></span></div>' +
@@ -1294,6 +1294,7 @@
 
   /* ---------- متابعة العملاء: لوحة شهرية ---------- */
   function viewClients() {
+    if (state.clientMonth === 'all') return viewClientsAll();
     var period = state.clientMonth || S.currentPeriod();
     var ym = period.slice(0, 7);
     var year = ym.slice(0, 4);
@@ -1317,6 +1318,7 @@
     var yearChips = Object.keys(years).sort().map(function (y) {
       return '<button class="chip' + (y === year ? ' active' : '') + '" data-cl-year="' + y + '">' + y + '</button>';
     }).join('');
+    var allChip = '<button class="chip" data-cl-month="all">كل الفترات</button><span class="fb-sep"></span>';
 
     /* تقسيم الجهات: سارية في هذا الشهر ← اللوحة، وغيرها ← الأرشيف */
     var live = [], archived = [];
@@ -1393,7 +1395,8 @@
                '<path d="M12 5v14M5 12h14"/></svg>جهة جديدة</button>' +
            '</div></div>' +
 
-           '<div class="filterbar">' + (Object.keys(years).length > 1 ? yearChips + '<span class="fb-sep"></span>' : '') +
+           '<div class="filterbar">' + allChip +
+             (Object.keys(years).length > 1 ? yearChips + '<span class="fb-sep"></span>' : '') +
              monthChips + '</div>' +
 
            '<div class="grid grid-4 mb">' +
@@ -1434,7 +1437,144 @@
              : '<div class="panel-body"><p class="hint">' + archived.length +
                ' جهة غير سارية في ' + F.arMonth(ym) +
                ' (لم تبدأ بعد، أو موقوفة، أو منتهية، أو قيد توقيع العقد).</p></div>') +
+           arrearsHTML() +
            '</div>';
+  }
+
+  /**
+   * ملاحظة أسفل الأرشيف: إجمالي المستحقات المتأخرة على الجهات المتعثرة.
+   * المتعثرة = جهة عليها شهر منقضٍ أو أكثر لم يُسدَّد بالكامل.
+   */
+  function arrearsHTML() {
+    var late = S.db.clients.map(function (c) {
+      return { c: c, s: S.clientSummary(c) };
+    }).filter(function (x) { return x.s.overdue > 0; })
+      .sort(function (a, b) { return b.s.overdue - a.s.overdue; });
+
+    if (!late.length) {
+      return '<div class="arrears" style="background:linear-gradient(90deg,var(--green-bg),transparent)">' +
+        '<div class="arrears-ico" style="background:var(--green)">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">' +
+          '<path d="M20 6 9 17l-5-5"/></svg></div>' +
+        '<div class="arrears-txt"><strong>لا توجد جهات متعثرة</strong>' +
+          '<span>كل الأشهر المنقضية مسدَّدة بالكامل</span></div>' +
+      '</div>';
+    }
+
+    var total = late.reduce(function (a, x) { return a + x.s.overdue; }, 0);
+    var months = late.reduce(function (a, x) { return a + x.s.overdueCount; }, 0);
+
+    return '<div class="arrears">' +
+      '<div class="arrears-ico">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+        '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>' +
+        '<path d="M12 9v4M12 17h.01"/></svg></div>' +
+      '<div class="arrears-txt"><strong>الجهات المتعثرة — ' + late.length + ' جهة</strong>' +
+        '<span>عليها ' + months + ' شهر غير مسدَّد بالكامل من الأشهر المنقضية</span></div>' +
+      '<div class="arrears-total"><span class="k">إجمالي المستحقات المتأخرة</span>' +
+        '<span class="v num">' + F.money(total) + ' ر.س</span></div>' +
+      '<div class="arrears-list">' + late.map(function (x) {
+        return '<span class="arrears-pill">' + F.esc(x.c.name) +
+               ' <b class="num">' + F.money(x.s.overdue) + '</b>' +
+               ' <span class="hint">(' + x.s.overdueCount + ' شهر)</span></span>';
+      }).join('') + '</div>' +
+    '</div>';
+  }
+
+  /* ---------- متابعة العملاء: كل الفترات مجمّعة ---------- */
+  function viewClientsAll() {
+    var clients = S.db.clients;
+    var rows = clients.map(function (c) {
+      var s = S.clientSummary(c);
+      var rest = Math.round((s.totalDue - s.totalPaid) * 100) / 100;
+      var months = S.clientDuesOf(c.id).length;
+      return { c: c, s: s, rest: rest, months: months };
+    });
+
+    var filt = state.clientPayFilter || 'all';
+    var shown = rows.filter(function (r) {
+      if (filt === 'unpaid') return r.s.overdue > 0;
+      if (filt === 'paid') return r.s.totalDue > 0 && r.rest <= 0;
+      if (filt === 'partial') return r.s.totalPaid > 0 && r.rest > 0;
+      if (filt === 'none') return r.months === 0;
+      return true;
+    });
+
+    var totDue = rows.reduce(function (a, r) { return a + r.s.totalDue; }, 0);
+    var totPaid = rows.reduce(function (a, r) { return a + r.s.totalPaid; }, 0);
+    var totRest = Math.round((totDue - totPaid) * 100) / 100;
+
+    var body = shown.map(function (r) {
+      var st = r.months === 0 ? 'none' : r.rest <= 0 ? 'paid' : r.s.totalPaid > 0 ? 'partial' : 'unpaid';
+      return '<tr>' +
+        '<td style="font-weight:600">' + F.esc(r.c.name) +
+          '<span class="hint" style="display:block">' + F.esc(feeDesc(r.c)) + '</span></td>' +
+        '<td>' + badge(STATUS_LABEL[S.clientEffectiveStatus(r.c)],
+                       STATUS_COLOR[S.clientEffectiveStatus(r.c)]) + '</td>' +
+        '<td class="num">' + (r.c.contractStart ? F.arMonth(r.c.contractStart.slice(0, 7)) : '—') + '</td>' +
+        '<td class="num">' + F.int(r.months) + '</td>' +
+        '<td class="num">' + F.money(r.s.totalDue) + '</td>' +
+        '<td class="num">' + F.money(r.s.totalPaid) + '</td>' +
+        '<td class="num" style="font-weight:700;color:' +
+          (r.rest > 0 ? 'var(--red)' : 'var(--green)') + '">' + F.money(r.rest) + '</td>' +
+        '<td>' + badge(DUE_LABEL[st], DUE_COLOR[st]) + '</td>' +
+        '<td><div class="t-actions">' +
+          '<button class="btn btn-sm" data-client-detail="' + r.c.id + '">كل الشهور</button>' +
+          '<button class="btn btn-sm btn-danger" data-client-del="' + r.c.id + '">حذف</button>' +
+        '</div></td></tr>';
+    }).join('');
+
+    var payChips = [['all', 'الكل'], ['unpaid', 'عليها متأخر'], ['partial', 'سداد جزئي'],
+                    ['paid', 'مكتملة السداد'], ['none', 'بلا مستحقات']].map(function (x) {
+      return '<button class="chip' + (filt === x[0] ? ' active' : '') + '" data-cl-filter="' + x[0] + '">' +
+             x[1] + '</button>';
+    }).join('');
+
+    var years = {};
+    clients.forEach(function (c) { if (c.contractStart) years[c.contractStart.slice(0, 4)] = 1; });
+    years[S.todayISO().slice(0, 4)] = 1;
+    var backChips = Object.keys(years).sort().map(function (y) {
+      return '<button class="chip" data-cl-year="' + y + '">' + y + '</button>';
+    }).join('');
+
+    return '<div class="page-head"><div>' +
+             '<h2>متابعة العملاء</h2>' +
+             '<p>كل الفترات — الإجمالي التراكمي لكل جهة عبر كامل السجل</p>' +
+           '</div><div style="display:flex;gap:8px;flex-wrap:wrap">' +
+             '<button class="btn btn-primary" data-add-client>' +
+               '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+               '<path d="M12 5v14M5 12h14"/></svg>جهة جديدة</button>' +
+           '</div></div>' +
+
+           '<div class="filterbar">' +
+             '<button class="chip active" data-cl-month="all">كل الفترات</button>' +
+             '<span class="fb-sep"></span>' + backChips +
+             '<span class="hint" style="margin-inline-start:8px">اختر سنة للعودة إلى العرض الشهري</span>' +
+           '</div>' +
+
+           '<div class="grid grid-4 mb">' +
+             kpiCard('إجمالي المستحق', F.money(totDue) + ' ر.س', 'كل الأشهر المسجّلة',
+                     'money', { v: 0, dir: 'flat' }) +
+             kpiCard('إجمالي المحصَّل', F.money(totPaid) + ' ر.س', 'ما تم سداده فعلاً',
+                     'cart', { v: 0, dir: 'flat' }) +
+             kpiCard('المتبقي', F.money(totRest) + ' ر.س', 'غير المسدَّد من كل الفترات',
+                     'trend', { v: 0, dir: 'flat' }) +
+             kpiCard('عدد الجهات', F.int(clients.length), 'المسجّلة في المتابعة',
+                     'pct', { v: 0, dir: 'flat' }) +
+           '</div>' +
+
+           '<div class="panel"><div class="panel-head">' +
+             '<h3>كل الجهات — إجمالي تراكمي</h3>' +
+             '<div style="display:flex;gap:6px;flex-wrap:wrap">' + payChips + '</div>' +
+           '</div><div class="table-wrap"><table><thead><tr>' +
+             '<th>الجهة</th><th>حالة العقد</th><th>بداية التعاقد</th><th>الأشهر</th>' +
+             '<th>إجمالي المستحق</th><th>المحصَّل</th><th>المتبقي</th><th>الحالة</th><th></th>' +
+           '</tr></thead><tbody>' +
+           (shown.length ? body
+             : '<tr><td colspan="9">' + C.empty('لا توجد جهات تطابق هذه التصفية') + '</td></tr>') +
+           '</tbody></table>' +
+           arrearsHTML() +
+           '</div></div>';
   }
 
   /* نافذة سريعة: كم المستحق؟ وهل تم السداد؟ — لجهة وشهر محددين */
@@ -1923,6 +2063,16 @@
     render();
   });
 
+  /* تبديل الوضع الليلي — يُحفظ محلياً لكل متصفح */
+  $('#themeBtn').addEventListener('click', function () {
+    var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    if (dark) document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', 'dark');
+    try { localStorage.setItem('afnad-theme', dark ? 'light' : 'dark'); } catch (e) {}
+    // الرسوم البيانية تُبنى بألوان محسوبة، فنعيد رسم الواجهة
+    render();
+  });
+
   function closeSidebar() {
     $('#sidebar').classList.remove('open');
     $('#backdrop').classList.remove('show');
@@ -2216,8 +2366,10 @@
     if (cm) { state.clientMonth = cm.dataset.clMonth; render(); return; }
     var cy = t.closest('[data-cl-year]');
     if (cy) {
-      var curM = (state.clientMonth || S.currentPeriod()).slice(5, 7);
-      state.clientMonth = cy.dataset.clYear + '-' + curM + '-01';
+      // عند القدوم من "كل الفترات" لا يوجد شهر حالي، فنرجع لشهر اليوم
+      var src = state.clientMonth && state.clientMonth !== 'all'
+        ? state.clientMonth : S.currentPeriod();
+      state.clientMonth = cy.dataset.clYear + '-' + src.slice(5, 7) + '-01';
       render(); return;
     }
     var cf = t.closest('[data-cl-filter]');
