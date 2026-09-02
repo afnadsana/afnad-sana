@@ -215,6 +215,23 @@ svg{width:18px;height:18px;flex:none}
   color:var(--text);font-size:13px;font-weight:600;cursor:pointer;
 }
 .date-range select:focus{outline:2px solid var(--brand-50);border-color:var(--brand)}
+/* حقل تاريخ بأرقام لاتينية — نص ظاهر + حقل تاريخ أصلي مخفي للنافذة */
+.dpick{position:relative;display:inline-flex;align-items:center}
+.dpick .dp-text{
+  border:1px solid var(--line);border-radius:9px;padding:7px 32px 7px 10px;background:#fff;
+  color:var(--text);font-size:13px;width:120px;text-align:center;font-variant-numeric:tabular-nums;
+}
+.dpick .dp-text:focus{outline:2px solid var(--brand-50);border-color:var(--brand)}
+.dpick .dp-native{
+  position:absolute;inset-inline-end:6px;bottom:0;width:1px;height:1px;
+  opacity:0;pointer-events:none;border:0;padding:0;
+}
+.dpick .dp-btn{
+  position:absolute;inset-inline-end:4px;display:grid;place-items:center;
+  width:24px;height:24px;border-radius:7px;color:var(--muted);background:transparent;border:0;cursor:pointer;
+}
+.dpick .dp-btn:hover{background:var(--bg);color:var(--brand)}
+.dpick .dp-btn svg{width:15px;height:15px}
 .range-label{
   font-size:12.5px;font-weight:700;color:var(--text);background:var(--bg);
   border:1px solid var(--line);border-radius:9px;padding:7px 11px;white-space:nowrap;

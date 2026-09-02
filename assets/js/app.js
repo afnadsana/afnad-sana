@@ -61,6 +61,39 @@
     return S.previousRange(r.from, r.to);
   }
 
+  /* ------------------------------------------------------------
+     حقل تاريخ بأرقام إنجليزية
+     كروم يرسم <input type="date"> بلغة واجهة المتصفح (عربي هنا)
+     فتظهر الأرقام هندية ولا تنفع سمة lang. لذلك نعرض حقلاً نصياً
+     بصيغة يوم/شهر/سنة بأرقام لاتينية، ونُبقي حقل تاريخ أصلياً
+     مخفياً لفتح نافذة اختيار التاريخ عند الضغط على الأيقونة.
+     ------------------------------------------------------------ */
+  function toDisplayDate(iso) {
+    if (!iso) return '';
+    var p = iso.split('-');
+    return p[2] + '/' + p[1] + '/' + p[0];
+  }
+  function fromDisplayDate(str) {
+    var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec((str || '').trim());
+    if (!m) return null;
+    var d = +m[1], mo = +m[2], y = +m[3];
+    var dt = new Date(y, mo - 1, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
+    return S.iso(dt);
+  }
+  function dateField(id, iso) {
+    return '<span class="dpick">' +
+      '<input type="text" id="' + id + '" class="dp-text" dir="ltr" inputmode="numeric" ' +
+        'placeholder="dd/mm/yyyy" maxlength="10" value="' + toDisplayDate(iso) + '">' +
+      '<input type="date" class="dp-native" id="' + id + '_n" value="' + (iso || '') + '" ' +
+        'tabindex="-1" aria-hidden="true">' +
+      '<button type="button" class="dp-btn" data-dp="' + id + '" aria-label="اختيار تاريخ">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+        '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>' +
+      '</button>' +
+    '</span>';
+  }
+
   /* الأشهر والسنوات الموجودة فعلاً في البيانات */
   function dataPeriods() {
     var mo = {}, yr = {};
@@ -164,9 +197,9 @@
       '<div class="date-range">' +
         '<span class="range-label num">' + label + '</span>' +
         monthSel + yearSel +
-        '<input type="date" lang="en-GB" id="fromDate" value="' + (r.from || '') + '">' +
+        dateField('fromDate', r.from) +
         '<span>إلى</span>' +
-        '<input type="date" lang="en-GB" id="toDate" value="' + (r.to || '') + '">' +
+        dateField('toDate', r.to) +
         '<button class="btn btn-primary btn-sm" id="applyRange">تطبيق</button>' +
       '</div>' +
     '</div>';
@@ -1520,6 +1553,12 @@
 
   /* --- اختيار شهر أو سنة محددة (تفويض) --- */
   $('#viewHost').addEventListener('change', function (e) {
+    /* اختيار تاريخ من النافذة الأصلية ينعكس على الحقل النصي */
+    if (e.target.classList.contains('dp-native')) {
+      var txt = $('#' + e.target.id.replace(/_n$/, ''));
+      if (txt) txt.value = toDisplayDate(e.target.value);
+      return;
+    }
     if (e.target.id === 'jumpMonth') {
       if (!e.target.value) return;
       state.preset = 'month'; state.month = e.target.value;
@@ -1540,9 +1579,17 @@
     var chip = t.closest('[data-preset]');
     if (chip) { state.preset = chip.dataset.preset; render(); return; }
 
+    var dpBtn = t.closest('[data-dp]');
+    if (dpBtn) {
+      var nat = $('#' + dpBtn.dataset.dp + '_n');
+      if (nat.showPicker) { try { nat.showPicker(); } catch (err) { nat.focus(); } }
+      else { nat.focus(); nat.click(); }
+      return;
+    }
+
     if (t.closest('#applyRange')) {
-      var f = $('#fromDate').value, to = $('#toDate').value;
-      if (!f || !to) { toast('حدّد تاريخ البداية والنهاية', true); return; }
+      var f = fromDisplayDate($('#fromDate').value), to = fromDisplayDate($('#toDate').value);
+      if (!f || !to) { toast('اكتب التاريخ بصيغة يوم/شهر/سنة — مثال 01/09/2026', true); return; }
       if (f > to) { toast('تاريخ البداية بعد تاريخ النهاية', true); return; }
       state.preset = 'custom'; state.from = f; state.to = to;
       render(); return;
