@@ -383,19 +383,22 @@ svg{width:18px;height:18px;flex:none}
 .fb-sep{width:1px;height:22px;background:var(--line);margin:0 4px}
 
 /* حقل تاريخ بأرقام لاتينية — نص ظاهر + حقل تاريخ أصلي مخفي للنافذة */
-.dpick{position:relative;display:inline-flex;align-items:center}
+/* اتجاه ثابت داخل الحقل: الأيقونة يميناً فيزيائياً والحشو يقابلها،
+   وإلا تداخلت الأرقام مع الأيقونة في سياق rtl */
+.dpick{position:relative;display:inline-flex;align-items:center;direction:ltr}
 .dpick .dp-text{
-  border:1px solid var(--line);border-radius:9px;padding:7px 32px 7px 10px;background:var(--input-bg);
-  color:var(--text);font-size:13px;width:120px;text-align:center;font-variant-numeric:tabular-nums;
+  border:1px solid var(--line);border-radius:9px;padding:7px 36px 7px 12px;background:var(--input-bg);
+  color:var(--text);font-size:13px;width:136px;text-align:left;
+  font-variant-numeric:tabular-nums;letter-spacing:.3px;
 }
 .dpick .dp-text:focus{outline:2px solid var(--brand-50);border-color:var(--brand)}
 .dpick .dp-native{
-  position:absolute;inset-inline-end:6px;bottom:0;width:1px;height:1px;
+  position:absolute;right:6px;bottom:0;width:1px;height:1px;
   opacity:0;pointer-events:none;border:0;padding:0;
 }
 .dpick .dp-btn{
-  position:absolute;inset-inline-end:4px;display:grid;place-items:center;
-  width:24px;height:24px;border-radius:7px;color:var(--muted);background:transparent;border:0;cursor:pointer;
+  position:absolute;right:5px;display:grid;place-items:center;
+  width:26px;height:26px;border-radius:7px;color:var(--muted);background:transparent;border:0;cursor:pointer;
 }
 .dpick .dp-btn:hover{background:var(--bg);color:var(--brand)}
 .dpick .dp-btn svg{width:15px;height:15px}
