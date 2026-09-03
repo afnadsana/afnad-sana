@@ -84,6 +84,9 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 input,select,textarea{font-family:inherit;font-size:14px;color:inherit}
 svg{width:18px;height:18px;flex:none}
 .num{font-variant-numeric:tabular-nums;direction:ltr;display:inline-block;unicode-bidi:isolate}
+/* خلايا الجدول تحتفظ بعرضها: display:inline-block أعلاه كان يُخرجها من
+   تخطيط الجدول فتنزاح الأعمدة عن عناوينها */
+td.num,th.num{display:table-cell}
 
 /* ================= شاشة التحميل وتسجيل الدخول ================= */
 .boot-screen{
