@@ -43,7 +43,7 @@
     return {
       user: '', orgName: '', role: 'member',
       entities: [], channels: [], entries: [], invoices: [],
-      clients: [], clientDues: [], clientReports: [], clientUsers: [],
+      clients: [], clientDues: [], clientReports: [], clientUsers: [], clientEvents: [],
       members: [],
       settings: { openingBalance: 0, bankName: '', vatRegistrationDate: null, defaultVatRate: 0.15 },
       log: []
@@ -78,12 +78,27 @@
       feeMarkupPercent: num(r.fee_markup_percent)
     };
   }
+  /* المنصات الإعلانية المدعومة — المفتاح يُخزَّن، والاسم للعرض */
+  var PLATFORMS = ['meta', 'snapchat', 'tiktok', 'google', 'x', 'nomu', 'other'];
+  var PLATFORM_AR = {
+    meta: 'ميتا (فيسبوك وانستقرام)', snapchat: 'سناب شات', tiktok: 'تيك توك',
+    google: 'جوجل', x: 'إكس (تويتر)', nomu: 'منصة نمو', other: 'أخرى'
+  };
+
   function mapReport(r) {
+    var spend = num(r.spend), revenue = num(r.revenue);
     return {
       id: r.id, clientId: r.client_id, date: r.report_date,
-      spend: num(r.spend), revenue: num(r.revenue),
-      reach: num(r.reach), leads: num(r.leads),
-      achievements: r.achievements || '', note: r.note || ''
+      platform: r.platform || 'meta',
+      spend: spend, revenue: revenue, donations: num(r.donations),
+      roas: spend > 0 ? Math.round((revenue / spend) * 100) / 100 : 0,
+      source: r.source || 'manual', note: r.note || ''
+    };
+  }
+  function mapEvent(r) {
+    return {
+      id: r.id, clientId: r.client_id, date: r.event_date,
+      kind: r.kind || 'general', title: r.title, note: r.note || ''
     };
   }
   function mapDue(r) {
@@ -176,7 +191,8 @@
       c.from('clients').select('*').eq('org_id', orgId).order('name'),
       c.from('client_dues').select('*').eq('org_id', orgId).order('period', { ascending: false }),
       c.from('client_reports').select('*').eq('org_id', orgId).order('report_date', { ascending: false }),
-      c.from('client_users').select('*').eq('org_id', orgId)
+      c.from('client_users').select('*').eq('org_id', orgId),
+      c.from('client_events').select('*').eq('org_id', orgId).order('event_date', { ascending: false })
     ]);
 
     for (var i = 0; i < q.length; i++) {
@@ -205,6 +221,7 @@
     out.clients    = q[8].data.map(mapClient);
     out.clientDues = q[9].data.map(mapDue);
     out.clientReports = q[10].data.map(mapReport);
+    out.clientEvents  = q[12].data.map(mapEvent);
     out.clientUsers   = q[11].data.map(function (r) {
       return { id: r.id, clientId: r.client_id, userId: r.user_id,
                email: r.email || '', createdAt: r.created_at };
@@ -576,22 +593,47 @@
     requireWrite();
     var row = {
       org_id: orgId, client_id: rep.clientId, report_date: rep.date,
+      platform: rep.platform || 'meta',
       spend: num(rep.spend), revenue: num(rep.revenue),
-      reach: Math.round(num(rep.reach)), leads: Math.round(num(rep.leads)),
-      achievements: (rep.achievements || '').trim(), note: (rep.note || '').trim(),
+      donations: Math.round(num(rep.donations)),
+      source: rep.source || 'manual', note: (rep.note || '').trim(),
       created_by: me.id
     };
     var r = await client().from('client_reports')
-              .upsert(row, { onConflict: 'client_id,report_date' }).select().single();
+              .upsert(row, { onConflict: 'client_id,report_date,platform' }).select().single();
     if (r.error) throw new Error(r.error.message);
     var rec = mapReport(r.data);
     var i = db.clientReports.findIndex(function (x) {
-      return x.clientId === rec.clientId && x.date === rec.date;
+      return x.clientId === rec.clientId && x.date === rec.date && x.platform === rec.platform;
     });
     if (i >= 0) db.clientReports[i] = rec; else db.clientReports.unshift(rec);
     var c = db.clients.find(function (x) { return x.id === rec.clientId; });
-    await log('تعديل', 'تقرير أداء ' + (c ? c.name : '') + ' ليوم ' + rec.date);
+    await log('تعديل', 'تقرير أداء ' + (c ? c.name : '') + ' — ' + PLATFORM_AR[rec.platform] +
+              ' ليوم ' + rec.date);
     return rec;
+  }
+
+  /** تجميع تقارير يوم واحد لجهة عبر كل المنصات */
+  function reportsByDay(clientId, from, to) {
+    var map = {};
+    db.clientReports.forEach(function (r) {
+      if (r.clientId !== clientId) return;
+      if (from && r.date < from) return;
+      if (to && r.date > to) return;
+      var d = map[r.date] || (map[r.date] = {
+        date: r.date, spend: 0, revenue: 0, donations: 0, platforms: []
+      });
+      d.spend += r.spend; d.revenue += r.revenue; d.donations += r.donations;
+      d.platforms.push(r);
+    });
+    return Object.keys(map).sort().reverse().map(function (k) {
+      var d = map[k];
+      d.spend = Math.round(d.spend * 100) / 100;
+      d.revenue = Math.round(d.revenue * 100) / 100;
+      d.roas = d.spend > 0 ? Math.round((d.revenue / d.spend) * 100) / 100 : 0;
+      d.platforms.sort(function (a, b) { return b.spend - a.spend; });
+      return d;
+    });
   }
 
   async function deleteReport(id) {
@@ -604,6 +646,38 @@
 
   function reportsOf(clientId) {
     return db.clientReports.filter(function (x) { return x.clientId === clientId; })
+             .sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+  }
+
+  /* ---------- سير أحداث الحملة ---------- */
+  async function saveEvent(ev) {
+    requireWrite();
+    var row = {
+      org_id: orgId, client_id: ev.clientId, event_date: ev.date,
+      kind: ev.kind || 'general', title: (ev.title || '').trim(),
+      note: (ev.note || '').trim(), created_by: me.id
+    };
+    if (!row.title) throw new Error('عنوان الحدث مطلوب');
+    var q = ev.id
+      ? await client().from('client_events').update(row).eq('id', ev.id).select().single()
+      : await client().from('client_events').insert(row).select().single();
+    if (q.error) throw new Error(q.error.message);
+    var rec = mapEvent(q.data);
+    var i = db.clientEvents.findIndex(function (x) { return x.id === rec.id; });
+    if (i >= 0) db.clientEvents[i] = rec; else db.clientEvents.unshift(rec);
+    return rec;
+  }
+
+  async function deleteEvent(id) {
+    requireWrite();
+    var r = await client().from('client_events').delete().eq('id', id);
+    if (r.error) throw new Error(r.error.message);
+    db.clientEvents = db.clientEvents.filter(function (x) { return x.id !== id; });
+    return true;
+  }
+
+  function eventsOf(clientId) {
+    return db.clientEvents.filter(function (x) { return x.clientId === clientId; })
              .sort(function (a, b) { return a.date < b.date ? 1 : -1; });
   }
 
@@ -1062,6 +1136,8 @@
     clientDuesOf: clientDuesOf, clientSummary: clientSummary,
     clientEffectiveStatus: clientEffectiveStatus, currentPeriod: currentPeriod,
     saveReport: saveReport, deleteReport: deleteReport, reportsOf: reportsOf,
+    saveEvent: saveEvent, deleteEvent: deleteEvent, eventsOf: eventsOf,
+    reportsByDay: reportsByDay, PLATFORMS: PLATFORMS, PLATFORM_AR: PLATFORM_AR,
     portalUsersOf: portalUsersOf, createPortalAccount: createPortalAccount,
     removePortalAccount: removePortalAccount,
     computeFee: computeFee, clientActiveInPeriod: clientActiveInPeriod,
