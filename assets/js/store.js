@@ -71,6 +71,7 @@
       id: r.id, entityId: r.entity_id, name: r.name,
       contractStatus: r.contract_status, contractStart: r.contract_start, contractEnd: r.contract_end,
       monthlyAmount: num(r.monthly_amount), note: r.note || '',
+      portalCode: r.portal_code || null,
       feeType: r.fee_type || 'fixed',
       feePercent: num(r.fee_percent),
       feeDeductPercent: num(r.fee_deduct_percent),
@@ -466,6 +467,7 @@
     if (patch.feePercent       !== undefined) row.fee_percent        = num(patch.feePercent);
     if (patch.feeDeductPercent !== undefined) row.fee_deduct_percent = num(patch.feeDeductPercent);
     if (patch.feeMarkupPercent !== undefined) row.fee_markup_percent = num(patch.feeMarkupPercent);
+    if (patch.portalCode       !== undefined) row.portal_code        = patch.portalCode || null;
 
     var r = await client().from('clients').update(row).eq('id', id).select().single();
     if (r.error) throw new Error(r.error.message);

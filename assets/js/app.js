@@ -1581,6 +1581,127 @@
            '</div></div>';
   }
 
+  /* ============================================================
+     الجمعيات — إدارة حسابات بوابة الجهات
+     ============================================================ */
+  function viewOrgs() {
+    var clients = S.db.clients;
+    var canEdit = S.canWrite();
+    var portalUrl = location.origin + location.pathname.replace(/[^/]*$/, '') + 'portal.html';
+
+    var rows = clients.map(function (c) {
+      var accts = S.portalUsersOf(c.id);
+      var reps = S.reportsOf(c.id);
+      var last = reps.length ? reps[0].date : null;
+      return '<tr>' +
+        '<td style="font-weight:600">' + F.esc(c.name) +
+          '<span class="hint" style="display:block">' +
+            badge(STATUS_LABEL[S.clientEffectiveStatus(c)], STATUS_COLOR[S.clientEffectiveStatus(c)]) +
+          '</span></td>' +
+        '<td>' + (accts.length
+          ? accts.map(function (a) {
+              return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">' +
+                '<span class="num" dir="ltr" style="font-size:12.5px">' + F.esc(a.email) + '</span>' +
+                (canEdit ? '<button class="btn btn-sm btn-danger" data-pu-del="' + a.id + '">إلغاء</button>' : '') +
+              '</div>';
+            }).join('')
+          : '<span style="color:var(--muted)">لا يوجد حساب</span>') + '</td>' +
+        '<td>' + (c.portalCode
+          ? '<span class="code-pill num" dir="ltr">' + F.esc(c.portalCode) + '</span>'
+          : '<span style="color:var(--muted)">—</span>') + '</td>' +
+        '<td class="num">' + (last ? F.arDate(last) : '<span style="color:var(--muted)">—</span>') +
+          '<span class="hint" style="display:block">' + reps.length + ' تقرير</span></td>' +
+        '<td><div class="t-actions">' +
+          (canEdit ? '<button class="btn btn-sm btn-primary" data-acct="' + c.id + '">إنشاء حساب</button>' : '') +
+          (canEdit ? '<button class="btn btn-sm" data-code="' + c.id + '">' +
+            (c.portalCode ? 'رمز جديد' : 'توليد رمز') + '</button>' : '') +
+          '<button class="btn btn-sm" data-report="' + c.id + '">تقارير الأداء</button>' +
+        '</div></td></tr>';
+    }).join('');
+
+    var withAcct = clients.filter(function (c) { return S.portalUsersOf(c.id).length; }).length;
+
+    return '<div class="page-head"><div>' +
+             '<h2>الجمعيات</h2>' +
+             '<p>حسابات دخول الجهات إلى بوابة الأداء — تُنشئها أنت، أو تُنشئها الجهة برمز دعوة</p>' +
+           '</div>' +
+           '<button class="btn btn-primary" data-add-client>' +
+             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+             '<path d="M12 5v14M5 12h14"/></svg>جهة جديدة</button>' +
+           '</div>' +
+
+           '<div class="vat-bar mb">' +
+             '<div class="vb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+               '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/>' +
+               '<path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg></div>' +
+             '<div class="vb-txt"><strong>رابط البوابة</strong>' +
+               '<span class="num" dir="ltr">' + F.esc(portalUrl) + '</span></div>' +
+             '<a class="btn btn-sm" href="' + portalUrl + '" target="_blank" rel="noopener">فتح البوابة</a>' +
+           '</div>' +
+
+           '<div class="grid grid-3 mb">' +
+             kpiCard('جهات لديها حساب', F.int(withAcct), 'من إجمالي ' + clients.length + ' جهة',
+                     'cart', { v: 0, dir: 'flat' }) +
+             kpiCard('إجمالي التقارير', F.int(S.db.clientReports.length), 'تقارير الأداء المسجّلة',
+                     'trend', { v: 0, dir: 'flat' }) +
+             kpiCard('بلا حساب بعد', F.int(clients.length - withAcct), 'أنشئ لها حساباً أو زوّدها برمز',
+                     'pct', { v: 0, dir: 'flat' }) +
+           '</div>' +
+
+           '<div class="panel"><div class="panel-head"><h3>الجهات وحساباتها</h3>' +
+             '<span class="hint">الجهة ترى أداء حملاتها فقط — لا فواتير ولا مستحقات</span></div>' +
+           '<div class="table-wrap"><table><thead><tr>' +
+             '<th>الجهة</th><th>حساب الدخول</th><th>رمز الدعوة</th><th>آخر تقرير</th><th></th>' +
+           '</tr></thead><tbody>' +
+           (clients.length ? rows : '<tr><td colspan="5"><div class="empty">' +
+             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">' +
+             '<path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg>' +
+             '<h4>لا توجد جهات بعد</h4><p>أضف أول جهة لتنشئ لها حساب بوابة.</p>' +
+             '<button class="btn btn-primary" data-add-client>إضافة جهة</button></div></td></tr>') +
+           '</tbody></table></div></div>';
+  }
+
+  /* إنشاء حساب دخول لجهة */
+  function accountForm(clientId) {
+    var c = S.db.clients.find(function (x) { return x.id === clientId; });
+    if (!c) return;
+
+    openModal('إنشاء حساب دخول: ' + c.name,
+      '<div class="form-grid">' +
+        field('البريد الإلكتروني', '<input type="email" id="ac_email" dir="ltr" placeholder="name@jamiya.org">') +
+        '<div class="field"><label>كلمة المرور</label>' +
+          '<input type="text" id="ac_pass" dir="ltr" placeholder="٦ أحرف على الأقل">' +
+          '<span class="hint"><a href="#" id="ac_gen">توليد كلمة مرور قوية</a></span></div>' +
+        '<div class="field full"><span class="hint">' +
+          'سلّم الجهة البريد وكلمة المرور، وتدخل من رابط البوابة. ' +
+          'تعرض لها أداء الحملات فقط.</span></div>' +
+      '</div>',
+      '<button class="btn btn-primary" id="modalSave">إنشاء</button>' +
+      '<button class="btn" data-close>إلغاء</button>',
+      function () {
+        var email = $('#ac_email').value.trim();
+        var pass = $('#ac_pass').value;
+        if (!email) { toast('البريد مطلوب', true); return; }
+        if (!pass || pass.length < 6) { toast('كلمة المرور ٦ أحرف على الأقل', true); return; }
+        closeModal();
+        run(function () { return S.createPortalAccount(c.id, email, pass); }, 'تم إنشاء الحساب');
+      });
+
+    $('#ac_gen').onclick = function (e) {
+      e.preventDefault();
+      $('#ac_pass').value = randomCode(12);
+      $('#ac_pass').select();
+    };
+  }
+
+  function randomCode(n) {
+    var abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    var a = new Uint32Array(n); crypto.getRandomValues(a);
+    var out = '';
+    for (var i = 0; i < n; i++) out += abc[a[i] % abc.length];
+    return out;
+  }
+
   /* ---------- تقرير الأداء اليومي لجهة ---------- */
   function reportForm(clientId) {
     var c = S.db.clients.find(function (x) { return x.id === clientId; });
@@ -2185,7 +2306,8 @@
   var VIEWS = {
     dashboard: viewDashboard, entries: viewEntries, invoices: viewInvoices,
     monthly: viewMonthly, channels: viewChannels, entities: viewEntities,
-    team: viewTeam, tax: viewTaxReport, clients: viewClients, log: viewLog, settings: viewSettings
+    team: viewTeam, tax: viewTaxReport, clients: viewClients, orgs: viewOrgs,
+    log: viewLog, settings: viewSettings
   };
 
   function render() {
@@ -2564,6 +2686,29 @@
     if (rep) { reportForm(rep.dataset.report); return; }
     var prt = t.closest('[data-portal]');
     if (prt) { portalForm(prt.dataset.portal); return; }
+    var act = t.closest('[data-acct]');
+    if (act) { accountForm(act.dataset.acct); return; }
+    var cod = t.closest('[data-code]');
+    if (cod) {
+      var cl = S.db.clients.find(function (x) { return x.id === cod.dataset.code; });
+      var msg = cl && cl.portalCode
+        ? 'توليد رمز جديد لـ«' + cl.name + '» سيُبطل الرمز الحالي. متابعة؟'
+        : null;
+      var doGen = function () {
+        run(function () {
+          return S.updateClient(cod.dataset.code, { portalCode: randomCode(8) });
+        }, 'تم توليد الرمز');
+      };
+      if (msg) confirmBox(msg, doGen); else doGen();
+      return;
+    }
+    var pud = t.closest('[data-pu-del]');
+    if (pud && !t.closest('#modalBody')) {
+      confirmBox('إلغاء وصول هذا الحساب إلى البوابة؟', function () {
+        run(function () { return S.removePortalAccount(pud.dataset.puDel); }, 'تم الإلغاء');
+      });
+      return;
+    }
 
     var ced = t.closest('[data-edit-client]');
     if (ced && !t.closest('#modalFoot')) {

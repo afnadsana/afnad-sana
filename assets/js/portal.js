@@ -21,7 +21,11 @@
   function client() {
     if (sb) return sb;
     if (!window.SUPA_READY) throw new Error('لم تُضبط مفاتيح الاتصال');
-    sb = window.supabase.createClient(window.SUPA_CONFIG.url, window.SUPA_CONFIG.anonKey);
+    // مفتاح تخزين مستقل: البوابة والنظام الإداري على نفس النطاق، ولولا
+    // الفصل لتشارَكا الجلسة ودخلت البوابة بحساب المالك.
+    sb = window.supabase.createClient(window.SUPA_CONFIG.url, window.SUPA_CONFIG.anonKey, {
+      auth: { storageKey: 'afnad-portal-session' }
+    });
     return sb;
   }
 
@@ -70,28 +74,30 @@
   async function loadAll() {
     var db = client();
 
-    // RLS تضمن أن هذا يرجع صف الجهة فقط
-    var cRes = await db.from('clients').select('*').limit(1);
-    if (cRes.error) throw new Error(cRes.error.message);
-    if (!cRes.data || !cRes.data.length) {
-      throw new Error('لا توجد جهة مرتبطة بهذا الحساب. تواصل مع إدارة أفناد سنا.');
+    var u = await db.auth.getUser();
+    var uid = u.data && u.data.user ? u.data.user.id : null;
+    if (!uid) throw new Error('انتهت الجلسة، سجّل الدخول من جديد');
+
+    // الجهة تُحدَّد من ربط الحساب صراحةً — لا بأول صف تُرجعه القاعدة
+    var link = await db.from('client_users').select('client_id')
+                 .eq('user_id', uid).maybeSingle();
+    if (link.error) throw new Error(link.error.message);
+    if (!link.data) {
+      throw new Error('هذا الحساب غير مرتبط بأي جهة. أنشئ حساباً برمز الدعوة، أو تواصل مع إدارة أفناد سنا.');
     }
-    var c = cRes.data[0];
+
+    var cRes = await db.from('clients').select('*').eq('id', link.data.client_id).maybeSingle();
+    if (cRes.error) throw new Error(cRes.error.message);
+    if (!cRes.data) throw new Error('تعذّر تحميل بيانات جهتك');
+    var c = cRes.data;
     state.client = {
       id: c.id, name: c.name, contractStatus: c.contract_status,
       contractStart: c.contract_start, contractEnd: c.contract_end,
       note: c.note || ''
     };
 
-    var dRes = await db.from('client_dues').select('*').order('period', { ascending: false });
-    state.dues = (dRes.data || []).map(function (x) {
-      return {
-        period: x.period, amountDue: num(x.amount_due), amountPaid: num(x.amount_paid),
-        paidDate: x.paid_date, note: x.note || ''
-      };
-    });
-
-    var rRes = await db.from('client_reports').select('*').order('report_date', { ascending: false });
+    var rRes = await db.from('client_reports').select('*')
+                 .eq('client_id', c.id).order('report_date', { ascending: false });
     state.reports = (rRes.data || []).map(function (x) {
       return {
         date: x.report_date, spend: num(x.spend), revenue: num(x.revenue),
@@ -168,26 +174,6 @@
       '</tr>';
     }).join('');
 
-    /* المستحقات — بيانات الجهة نفسها فقط */
-    var totDue = state.dues.reduce(function (a, x) { return a + x.amountDue; }, 0);
-    var totPaid = state.dues.reduce(function (a, x) { return a + x.amountPaid; }, 0);
-    var rest = Math.round((totDue - totPaid) * 100) / 100;
-    var dueRows = state.dues.map(function (d) {
-      var left = Math.round((d.amountDue - d.amountPaid) * 100) / 100;
-      var s = d.amountDue > 0 && d.amountPaid >= d.amountDue ? ['مسدَّد', 'var(--green-bg)', 'var(--green)']
-            : d.amountPaid > 0 ? ['جزئي', 'var(--amber-bg)', 'var(--amber-ink)']
-            : ['غير مسدَّد', 'var(--red-bg)', 'var(--red)'];
-      return '<tr>' +
-        '<td>' + F.arMonth(d.period.slice(0, 7)) + '</td>' +
-        '<td class="num">' + F.money(d.amountDue) + '</td>' +
-        '<td class="num">' + F.money(d.amountPaid) + '</td>' +
-        '<td class="num" style="font-weight:700;color:' +
-          (left > 0 ? 'var(--red)' : 'var(--green)') + '">' + F.money(left) + '</td>' +
-        '<td><span class="tag" style="background:' + s[1] + ';color:' + s[2] + '">' + s[0] + '</span></td>' +
-        '<td class="num">' + (d.paidDate ? F.arDate(d.paidDate) : '—') + '</td>' +
-      '</tr>';
-    }).join('');
-
     $('#pHost').innerHTML =
       '<div class="page-head"><div>' +
         '<h2>تقرير الأداء</h2>' +
@@ -225,16 +211,6 @@
         '</tr></thead><tbody>' +
         (rows.length ? tbl : '<tr><td colspan="7">' +
           emptyBox('لا توجد تقارير في هذه الفترة', 'ستظهر هنا بمجرد تسجيل أول تقرير.') + '</td></tr>') +
-        '</tbody></table></div></div>' +
-
-      '<div class="panel"><div class="panel-head"><h3>مستحقاتكم</h3>' +
-        '<span class="hint">الإجمالي ' + F.money(totDue) + ' · المسدَّد ' + F.money(totPaid) +
-        ' · المتبقي ' + F.money(rest) + ' ر.س</span></div>' +
-        '<div class="table-wrap"><table><thead><tr>' +
-          '<th>الشهر</th><th>المستحق</th><th>المسدَّد</th><th>المتبقي</th><th>الحالة</th><th>تاريخ السداد</th>' +
-        '</tr></thead><tbody>' +
-        (state.dues.length ? dueRows : '<tr><td colspan="6">' +
-          emptyBox('لا توجد مستحقات مسجّلة', '') + '</td></tr>') +
         '</tbody></table></div></div>';
   }
 
@@ -305,21 +281,62 @@
   }
 
   /* ---------- الأحداث ---------- */
+  var mode = 'signin';
+
+  document.querySelectorAll('[data-tab]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      mode = b.dataset.tab;
+      document.querySelectorAll('[data-tab]').forEach(function (x) {
+        x.classList.toggle('active', x === b);
+      });
+      $('#codeField').hidden = mode !== 'signup';
+      $('#pPass').setAttribute('autocomplete', mode === 'signup' ? 'new-password' : 'current-password');
+      $('#pSubmit').textContent = mode === 'signup' ? 'إنشاء الحساب' : 'تسجيل الدخول';
+      $('#authMsg').hidden = true;
+    });
+  });
+
   $('#authForm').addEventListener('submit', async function (e) {
     e.preventDefault();
     var btn = $('#pSubmit');
-    btn.disabled = true; btn.textContent = 'جارٍ الدخول…';
+    var original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = mode === 'signup' ? 'جارٍ الإنشاء…' : 'جارٍ الدخول…';
     $('#authMsg').hidden = true;
+    var db = client();
+    var email = $('#pEmail').value.trim();
+    var pass = $('#pPass').value;
+
     try {
-      var r = await client().auth.signInWithPassword({
-        email: $('#pEmail').value.trim(), password: $('#pPass').value
-      });
+      if (mode === 'signup') {
+        var code = $('#pCode').value.trim();
+        if (!code) throw new Error('رمز الدعوة مطلوب');
+
+        var su = await db.auth.signUp({ email: email, password: pass });
+        if (su.error) throw new Error(su.error.message);
+        if (su.data.user && su.data.user.identities && su.data.user.identities.length === 0) {
+          // البريد مسجّل مسبقاً — نحاول الدخول به ثم نربطه بالرمز
+          var si = await db.auth.signInWithPassword({ email: email, password: pass });
+          if (si.error) throw new Error('هذا البريد مسجّل مسبقاً بكلمة مرور مختلفة');
+        } else if (!su.data.session) {
+          showAuth('أُنشئ حسابك. افتح بريدك وأكّده ثم سجّل الدخول وأدخل رمز الدعوة.', false);
+          return;
+        }
+
+        var rd = await db.rpc('redeem_portal_code', { p_code: code });
+        if (rd.error) throw new Error(rd.error.message);
+        if (!rd.data || !rd.data.ok) throw new Error((rd.data && rd.data.reason) || 'تعذّر ربط الحساب');
+        await enter();
+        return;
+      }
+
+      var r = await db.auth.signInWithPassword({ email: email, password: pass });
       if (r.error) throw new Error('البريد أو كلمة المرور غير صحيحة');
       await enter();
     } catch (err) {
       showAuth(err.message, true);
     } finally {
-      btn.disabled = false; btn.textContent = 'تسجيل الدخول';
+      btn.disabled = false; btn.textContent = original;
     }
   });
 

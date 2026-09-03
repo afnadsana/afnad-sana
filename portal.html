@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>بوابة الجهات — أفناد سنا</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
-<link rel="stylesheet" href="assets/css/style.css?v=20260902f">
+<link rel="stylesheet" href="assets/css/style.css?v=20260903a">
 <script>
 /* يُطبَّق قبل الرسم لتفادي وميض الوضع الفاتح */
 (function () {
@@ -32,6 +32,11 @@
       <p>تقرير أداء حملاتك مع شركة أفناد سنا</p>
     </div>
 
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-tab="signin">تسجيل الدخول</button>
+      <button class="auth-tab" data-tab="signup">حساب جديد</button>
+    </div>
+
     <form class="auth-form" id="authForm" autocomplete="on">
       <div class="field">
         <label for="pEmail">البريد الإلكتروني</label>
@@ -43,12 +48,17 @@
         <input type="password" id="pPass" required autocomplete="current-password"
                placeholder="••••••••" dir="ltr">
       </div>
+      <div class="field" id="codeField" hidden>
+        <label for="pCode">رمز الدعوة</label>
+        <input type="text" id="pCode" placeholder="الرمز الذي زوّدتك به أفناد سنا" dir="ltr">
+        <span class="hint">اطلبه من إدارة أفناد سنا — يربط حسابك بجهتك</span>
+      </div>
       <div class="auth-msg" id="authMsg" hidden></div>
       <button type="submit" class="btn btn-primary auth-submit" id="pSubmit">تسجيل الدخول</button>
     </form>
 
     <p class="auth-foot">
-      الحساب يُنشَأ من إدارة أفناد سنا. للاستفسار تواصل معنا.
+      تعرض هذه البوابة أداء حملاتكم الإعلانية فقط — لا تتضمن أي بيانات فواتير أو مستحقات.
     </p>
   </div>
 </div>
@@ -91,8 +101,8 @@
 <div class="toast-host" id="toastHost"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="assets/js/config.js?v=20260902f"></script>
-<script src="assets/js/charts.js?v=20260902f"></script>
-<script src="assets/js/portal.js?v=20260902f"></script>
+<script src="assets/js/config.js?v=20260903a"></script>
+<script src="assets/js/charts.js?v=20260903a"></script>
+<script src="assets/js/portal.js?v=20260903a"></script>
 </body>
 </html>
