@@ -20,6 +20,7 @@
     clientMonth: null,      // شهر لوحة متابعة العملاء (YYYY-MM-01)
     clientPayFilter: 'all', // تصفية حالة السداد في اللوحة الشهرية
     clientShowArchive: false,
+    orgRange: 'last30',     // فترة صفحة الجمعيات
     invDir: 'all',      // تصفية الفواتير: الكل / وارد / صادر
     invStatus: 'all',   // تصفية الفواتير: الكل / مسدّدة / معلّقة
     taxYear: S.todayISO().slice(0, 4)
@@ -1593,10 +1594,35 @@
     var canEdit = S.canWrite();
     var portalUrl = location.origin + location.pathname.replace(/[^/]*$/, '') + 'portal.html';
 
+    /* قائمة تحديد الفترة — تحكم أرقام الأداء المعروضة */
+    var rr = orgRange();
+    var presets = [['today', 'اليوم'], ['yesterday', 'أمس'], ['last7', 'آخر 7 أيام'],
+                   ['last30', 'آخر 30 يوم'], ['thisMonth', 'هذا الشهر'],
+                   ['prevMonth', 'الشهر السابق'], ['all', 'كل الفترات']];
+    var rangeChips = presets.map(function (p) {
+      return '<button class="chip' + (state.orgRange === p[0] ? ' active' : '') +
+             '" data-org-range="' + p[0] + '">' + p[1] + '</button>';
+    }).join('');
+    var rangeLabel = rr.from && rr.to
+      ? F.arDate(rr.from) + ' — ' + F.arDate(rr.to) : 'كل السجل';
+
+    function inR(d) {
+      if (rr.from && d < rr.from) return false;
+      if (rr.to && d > rr.to) return false;
+      return true;
+    }
+
+    var totSpend = 0, totRev = 0, totDon = 0;
+
     var rows = clients.map(function (c) {
       var accts = S.portalUsersOf(c.id);
-      var reps = S.reportsOf(c.id);
+      var reps = S.reportsOf(c.id).filter(function (x) { return inR(x.date); });
       var last = reps.length ? reps[0].date : null;
+      var sp = reps.reduce(function (a, x) { return a + x.spend; }, 0);
+      var rv = reps.reduce(function (a, x) { return a + x.revenue; }, 0);
+      var dn = reps.reduce(function (a, x) { return a + x.donations; }, 0);
+      totSpend += sp; totRev += rv; totDon += dn;
+      var roas = sp > 0 ? rv / sp : 0;
       return '<tr>' +
         '<td style="font-weight:600">' + F.esc(c.name) +
           '<span class="hint" style="display:block">' +
@@ -1613,6 +1639,12 @@
         '<td>' + (c.portalCode
           ? '<span class="code-pill num" dir="ltr">' + F.esc(c.portalCode) + '</span>'
           : '<span style="color:var(--muted)">—</span>') + '</td>' +
+        '<td class="num">' + F.money(sp) + '</td>' +
+        '<td class="num" style="font-weight:700">' + F.int(dn) + '</td>' +
+        '<td class="num">' + F.money(rv) + '</td>' +
+        '<td class="num" style="font-weight:800;color:' +
+          (sp <= 0 ? 'var(--muted)' : roas >= 1 ? 'var(--green)' : 'var(--red)') + '">' +
+          (sp > 0 ? roas.toFixed(2) + 'x' : '—') + '</td>' +
         '<td class="num">' + (last ? F.arDate(last) : '<span style="color:var(--muted)">—</span>') +
           '<span class="hint" style="display:block">' + reps.length + ' تقرير</span></td>' +
         '<td><div class="t-actions">' +
@@ -1643,26 +1675,50 @@
              '<a class="btn btn-sm" href="' + portalUrl + '" target="_blank" rel="noopener">فتح البوابة</a>' +
            '</div>' +
 
-           '<div class="grid grid-3 mb">' +
-             kpiCard('جهات لديها حساب', F.int(withAcct), 'من إجمالي ' + clients.length + ' جهة',
+           '<div class="filterbar">' + rangeChips +
+             '<span class="spacer"></span>' +
+             '<span class="range-label num">' + rangeLabel + '</span></div>' +
+
+           '<div class="grid grid-4 mb">' +
+             kpiCard('الإنفاق', F.money(totSpend) + ' ر.س', 'على كل الجمعيات في الفترة',
+                     'money', { v: 0, dir: 'flat' }) +
+             kpiCard('العائد', F.money(totRev) + ' ر.س', 'إجمالي التبرعات المحصّلة',
                      'cart', { v: 0, dir: 'flat' }) +
-             kpiCard('إجمالي التقارير', F.int(S.db.clientReports.length), 'تقارير الأداء المسجّلة',
-                     'trend', { v: 0, dir: 'flat' }) +
-             kpiCard('بلا حساب بعد', F.int(clients.length - withAcct), 'أنشئ لها حساباً أو زوّدها برمز',
+             kpiCard('عدد التبرعات', F.int(totDon), 'عملية تبرع في الفترة',
                      'pct', { v: 0, dir: 'flat' }) +
+             kpiCard('ROAS', (totSpend > 0 ? (totRev / totSpend).toFixed(2) : '0.00') + 'x',
+                     withAcct + ' من ' + clients.length + ' جهة لديها حساب دخول',
+                     'trend', { v: 0, dir: 'flat' }) +
            '</div>' +
 
            '<div class="panel"><div class="panel-head"><h3>الجهات وحساباتها</h3>' +
              '<span class="hint">الجهة ترى أداء حملاتها فقط — لا فواتير ولا مستحقات</span></div>' +
            '<div class="table-wrap"><table><thead><tr>' +
-             '<th>الجهة</th><th>حساب الدخول</th><th>رمز الدعوة</th><th>آخر تقرير</th><th></th>' +
+             '<th>الجهة</th><th>حساب الدخول</th><th>رمز الدعوة</th>' +
+             '<th>الإنفاق</th><th>التبرعات</th><th>العائد</th><th>ROAS</th>' +
+             '<th>آخر تقرير</th><th></th>' +
            '</tr></thead><tbody>' +
-           (clients.length ? rows : '<tr><td colspan="5"><div class="empty">' +
+           (clients.length ? rows : '<tr><td colspan="9"><div class="empty">' +
              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">' +
              '<path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg>' +
              '<h4>لا توجد جهات بعد</h4><p>أضف أول جهة لتنشئ لها حساب بوابة.</p>' +
              '<button class="btn btn-primary" data-add-client>إضافة جهة</button></div></td></tr>') +
            '</tbody></table></div></div>';
+  }
+
+  /* مدى فترة صفحة الجمعيات */
+  function orgRange() {
+    var t = S.todayISO();
+    var d = new Date(t + 'T00:00:00'), y = d.getFullYear(), m = d.getMonth();
+    switch (state.orgRange) {
+      case 'today':     return { from: t, to: t };
+      case 'yesterday': return { from: S.addDays(t, -1), to: S.addDays(t, -1) };
+      case 'last7':     return { from: S.addDays(t, -6), to: t };
+      case 'thisMonth': return { from: t.slice(0, 8) + '01', to: t };
+      case 'prevMonth': return { from: S.iso(new Date(y, m - 1, 1)), to: S.iso(new Date(y, m, 0)) };
+      case 'all':       return { from: null, to: null };
+      default:          return { from: S.addDays(t, -29), to: t };
+    }
   }
 
   /* إنشاء حساب دخول لجهة */
@@ -2769,6 +2825,8 @@
     if (rep) { reportForm(rep.dataset.report); return; }
     var prt = t.closest('[data-portal]');
     if (prt) { portalForm(prt.dataset.portal); return; }
+    var orr = t.closest('[data-org-range]');
+    if (orr) { state.orgRange = orr.dataset.orgRange; render(); return; }
     var act = t.closest('[data-acct]');
     if (act) { accountForm(act.dataset.acct); return; }
     var cod = t.closest('[data-code]');
