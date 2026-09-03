@@ -16,7 +16,8 @@
     dues: [],          // مستحقاتها
     reports: [],       // تقارير الأداء اليومية (صف لكل منصة)
     events: [],        // سير أحداث الحملة
-    range: 'last30'    // today | last7 | last30 | thisMonth | all
+    range: 'last30',   // today | last7 | last30 | thisMonth | all | custom
+    from: null, to: null
   };
 
   function client() {
@@ -62,8 +63,36 @@
       case 'last30':    return { from: addDays(t, -29), to: t };
       case 'thisMonth': return { from: t.slice(0, 8) + '01', to: t };
       case 'all':       return { from: null, to: null };
+      case 'custom':    return { from: state.from, to: state.to };
       default:          return { from: addDays(t, -29), to: t };
     }
+  }
+
+  /* حقل تاريخ بأرقام لاتينية — كروم يرسم input[type=date] بلغة الواجهة */
+  function toDisp(iso) {
+    if (!iso) return '';
+    var p = iso.split('-');
+    return p[2] + '/' + p[1] + '/' + p[0];
+  }
+  function fromDisp(str) {
+    var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec((str || '').trim());
+    if (!m) return null;
+    var d = +m[1], mo = +m[2], y = +m[3];
+    var dt = new Date(y, mo - 1, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
+    var p = function (n) { return String(n).padStart(2, '0'); };
+    return y + '-' + p(mo) + '-' + p(d);
+  }
+  function dateBox(id, iso) {
+    return '<span class="dpick">' +
+      '<input type="text" id="' + id + '" class="dp-text" dir="ltr" inputmode="numeric" ' +
+        'placeholder="dd/mm/yyyy" maxlength="10" value="' + toDisp(iso) + '">' +
+      '<input type="date" class="dp-native" id="' + id + '_n" value="' + (iso || '') + '" ' +
+        'tabindex="-1" aria-hidden="true">' +
+      '<button type="button" class="dp-btn" data-dp="' + id + '" aria-label="اختيار تاريخ">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+        '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>' +
+      '</button></span>';
   }
   function inRange(dateStr, r) {
     if (r.from && dateStr < r.from) return false;
@@ -154,7 +183,8 @@
 
   function kpi(title, big, sub, ico) {
     var icons = {
-      money: '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+      money: '<text x="12" y="17.5" text-anchor="middle" font-size="12.5" font-weight="800" ' +
+             'fill="currentColor" stroke="none">ر.س</text>',
       cart:  '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/>',
       trend: '<path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/>',
       pct:   '<path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>'
@@ -220,7 +250,14 @@
     var chips = presets.map(function (p) {
       return '<button class="chip' + (state.range === p[0] ? ' active' : '') +
              '" data-range="' + p[0] + '">' + p[1] + '</button>';
-    }).join('');
+    }).join('') +
+      '<span class="spacer"></span>' +
+      '<div class="date-range">' +
+        '<span class="range-label num">' +
+          (r.from && r.to ? F.arDate(r.from) + ' — ' + F.arDate(r.to) : 'كل السجل') + '</span>' +
+        dateBox('pFrom', r.from) + '<span>إلى</span>' + dateBox('pTo', r.to) +
+        '<button class="btn btn-primary btn-sm" id="pApply">تطبيق</button>' +
+      '</div>';
 
     /* جدول الأداء اليومي — إجمالي اليوم مع تفصيل المنصات */
     var tbl = days.map(function (d) {
@@ -429,7 +466,31 @@
 
   $('#pHost').addEventListener('click', function (e) {
     var c = e.target.closest('[data-range]');
-    if (c) { state.range = c.dataset.range; render(); }
+    if (c) { state.range = c.dataset.range; render(); return; }
+
+    var dp = e.target.closest('[data-dp]');
+    if (dp) {
+      var nat = $('#' + dp.dataset.dp + '_n');
+      if (nat.showPicker) { try { nat.showPicker(); } catch (err) { nat.focus(); } }
+      else { nat.focus(); nat.click(); }
+      return;
+    }
+
+    if (e.target.closest('#pApply')) {
+      var f = fromDisp($('#pFrom').value), t2 = fromDisp($('#pTo').value);
+      if (!f || !t2) { toast('اكتب التاريخ بصيغة يوم/شهر/سنة — مثال 01/09/2026', true); return; }
+      if (f > t2) { toast('تاريخ البداية بعد تاريخ النهاية', true); return; }
+      state.range = 'custom'; state.from = f; state.to = t2;
+      render();
+    }
+  });
+
+  /* اختيار تاريخ من نافذة المتصفح ينعكس على الحقل النصي */
+  $('#pHost').addEventListener('change', function (e) {
+    if (e.target.classList.contains('dp-native')) {
+      var txt = $('#' + e.target.id.replace(/_n$/, ''));
+      if (txt) txt.value = toDisp(e.target.value);
+    }
   });
 
   boot();

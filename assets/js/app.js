@@ -369,7 +369,8 @@
   function kpiCard(title, big, sub, ico, d, lowerIsBetter) {
     var icons = {
       cart:  '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/>',
-      money: '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+      money: '<text x="12" y="17.5" text-anchor="middle" font-size="12.5" font-weight="800" ' +
+             'fill="currentColor" stroke="none">ر.س</text>',
       pct:   '<path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
       trend: '<path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/>'
     };
@@ -1802,7 +1803,8 @@
       (canEdit ?
       '<div class="form-grid mb" style="padding:14px;border:1px dashed var(--line);border-radius:12px">' +
         '<div class="field full"><label>تسجيل تقرير يوم</label>' +
-          '<span class="hint">ما تراه الجهة في بوابتها</span></div>' +
+          '<span class="hint">المنصات الإعلانية (ميتا/سناب/تيك توك/جوجل) = الإنفاق فقط · ' +
+          'منصة نمو = عدد التبرعات والعائد</span></div>' +
         '<div class="field"><label>التاريخ</label>' + dateField('rp_date', S.todayISO()) + '</div>' +
         '<div class="field"><label>المنصة</label><select id="rp_plat">' +
           S.PLATFORMS.map(function (p) {
