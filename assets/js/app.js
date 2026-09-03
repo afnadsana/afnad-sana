@@ -1278,8 +1278,14 @@
   };
   var FEE_LABEL = { fixed: 'مبلغ ثابت', percent: 'نسبة من الإيراد', net_markup: 'خصم ثم هامش' };
   var EVENT_KIND = {
-    campaign: 'حملة', design: 'تصميم', video: 'مقطع',
-    launch: 'إطلاق', report: 'تقرير', update: 'تحديث', general: 'حدث'
+    campaign_new:  'إنشاء حملة جديدة',
+    campaign_edit: 'تعديل حملة',
+    video:         'مونتاج مقطع',
+    design:        'تصميم جديد',
+    content:       'كتابة محتوى',
+    report:        'تقرير أداء',
+    meeting:       'اجتماع',
+    general:       'منجز آخر'
   };
   /** وصف نموذج الأتعاب بصيغة مقروءة */
   function feeDesc(c) {
@@ -1828,7 +1834,7 @@
       (list.length ? rows : '<tr><td colspan="7">' + C.empty('لا توجد تقارير بعد') + '</td></tr>') +
       '</tbody></table></div>' +
 
-      '<h3 style="font-size:15px;font-weight:700;margin:18px 0 10px">سير أحداث الحملة</h3>' +
+      '<h3 style="font-size:15px;font-weight:700;margin:18px 0 10px">سير العمل</h3>' +
       (canEdit ?
       '<div class="form-grid mb" style="padding:14px;border:1px dashed var(--line);border-radius:12px">' +
         '<div class="field"><label>تاريخ الحدث</label>' + dateField('ev_date', S.todayISO()) + '</div>' +
@@ -1836,8 +1842,8 @@
           Object.keys(EVENT_KIND).map(function (k) {
             return '<option value="' + k + '">' + EVENT_KIND[k] + '</option>';
           }).join('') + '</select></div>' +
-        '<div class="field full"><label>العنوان</label>' +
-          '<input id="ev_title" placeholder="مثال: إطلاق حملة رمضان، تسليم 6 تصاميم"></div>' +
+        '<div class="field full"><label>ماذا أنجزنا؟</label>' +
+          '<input id="ev_title" placeholder="مثال: تم إنشاء حملة جديدة لجمع التبرعات، تم مونتاج مقطع تعريفي"></div>' +
         '<div class="field full"><label>تفصيل (يظهر للجهة)</label>' +
           '<input id="ev_note" placeholder="اختياري"></div>' +
         '<div class="field full"><button class="btn btn-primary" id="evSave" type="button">إضافة الحدث</button>' +
@@ -1887,7 +1893,7 @@
 
     function evFill(e) {
       $('#ev_date').value = toDisplayDate(e ? e.date : S.todayISO());
-      $('#ev_kind').value = e ? e.kind : 'campaign';
+      $('#ev_kind').value = e ? e.kind : 'campaign_new';
       $('#ev_title').value = e ? e.title : '';
       $('#ev_note').value = e ? e.note : '';
       editingEvent = e ? e.id : null;

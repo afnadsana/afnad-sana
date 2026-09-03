@@ -282,7 +282,7 @@ svg{width:18px;height:18px;flex:none}
 .p-top-actions{display:flex;align-items:center;gap:10px}
 .p-main{flex:1;padding:22px;max-width:1280px;width:100%;margin:0 auto}
 
-/* سير أحداث الحملة */
+/* سير العمل */
 .timeline{list-style:none;position:relative;padding-inline-start:22px}
 .timeline::before{
   content:"";position:absolute;inset-inline-start:5px;top:6px;bottom:6px;

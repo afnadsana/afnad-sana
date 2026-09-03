@@ -15,7 +15,7 @@
     client: null,      // بيانات الجهة
     dues: [],          // مستحقاتها
     reports: [],       // تقارير الأداء اليومية (صف لكل منصة)
-    events: [],        // سير أحداث الحملة
+    events: [],        // سير العمل
     range: 'last30',   // today | last7 | last30 | thisMonth | all | custom
     from: null, to: null
   };
@@ -148,13 +148,17 @@
     google: 'جوجل', x: 'إكس', nomu: 'منصة نمو', other: 'أخرى'
   };
   var KIND_AR = {
-    design: 'تصميم', campaign: 'حملة', video: 'مقطع', report: 'تقرير',
-    launch: 'إطلاق', update: 'تحديث', general: 'حدث'
+    campaign_new: 'حملة جديدة', campaign_edit: 'تعديل حملة', video: 'مونتاج مقطع',
+    design: 'تصميم', content: 'محتوى', report: 'تقرير أداء',
+    meeting: 'اجتماع', general: 'منجز',
+    // مفاتيح قديمة محفوظة للتوافق
+    campaign: 'حملة', launch: 'إطلاق', update: 'تحديث'
   };
   var KIND_COLOR = {
-    design: 'var(--violet)', campaign: 'var(--brand)', video: 'var(--cyan)',
-    report: 'var(--green)', launch: 'var(--amber)', update: 'var(--muted)',
-    general: 'var(--muted)'
+    campaign_new: 'var(--brand)', campaign_edit: 'var(--amber)', video: 'var(--cyan)',
+    design: 'var(--violet)', content: 'var(--green)', report: 'var(--green)',
+    meeting: 'var(--muted)', general: 'var(--muted)',
+    campaign: 'var(--brand)', launch: 'var(--amber)', update: 'var(--muted)'
   };
 
   /** تجميع صفوف المنصات ليوم واحد */
@@ -227,7 +231,7 @@
       '</div>';
     }).join('') + '</div>' : window.Charts.empty('لا يوجد إنفاق في هذه الفترة');
 
-    /* سير أحداث الحملة */
+    /* سير العمل */
     var evs = state.events.filter(function (x) { return inRange(x.date, r); });
     var timeline = evs.length
       ? '<ul class="timeline">' + evs.map(function (e) {
@@ -310,7 +314,7 @@
       '<div class="panel mb"><div class="panel-head"><h3>' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
         '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>' +
-        'سير أحداث الحملة</h3>' +
+        'سير العمل</h3>' +
         '<span class="hint">' + evs.length + ' حدث في الفترة</span></div>' +
         '<div class="panel-body">' + timeline + '</div></div>' +
 
