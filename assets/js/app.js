@@ -1277,6 +1277,12 @@
     pending: ['#e8ecff', '#3b45c9']
   };
   var FEE_LABEL = { fixed: 'مبلغ ثابت', percent: 'نسبة من الإيراد', net_markup: 'خصم ثم هامش' };
+  var PLATFORM_COLOR = {
+    meta: '#1877F2', snapchat: '#F5C800', tiktok: '#00C4BC',
+    google: '#EA4335', x: '#5B7083', nomu: '#16A34A', other: '#8a8fa8'
+  };
+  function pColor(k) { return PLATFORM_COLOR[k] || PLATFORM_COLOR.other; }
+
   var EVENT_KIND = {
     campaign_new:  'إنشاء حملة جديدة',
     campaign_edit: 'تعديل حملة',
@@ -1779,7 +1785,9 @@
     var rows = list.slice(0, 60).map(function (r) {
       return '<tr>' +
         '<td class="num">' + F.arDate(r.date) + '</td>' +
-        '<td>' + F.esc(S.PLATFORM_AR[r.platform] || r.platform) +
+        '<td><span class="tag" style="background:var(--bg)">' +
+          '<i class="dot" style="background:' + pColor(r.platform) + '"></i>' +
+          F.esc(S.PLATFORM_AR[r.platform] || r.platform) + '</span>' +
           (r.source === 'auto' ? '<span class="hint" style="display:block">تلقائي</span>' : '') + '</td>' +
         '<td class="num">' + F.money(r.spend) + '</td>' +
         '<td class="num" style="font-weight:700">' + F.int(r.donations) + '</td>' +

@@ -147,6 +147,12 @@
     meta: 'ميتا', snapchat: 'سناب شات', tiktok: 'تيك توك',
     google: 'جوجل', x: 'إكس', nomu: 'منصة نمو', other: 'أخرى'
   };
+  /* ألوان كل منصة بهويتها */
+  var PLATFORM_COLOR = {
+    meta: '#1877F2', snapchat: '#F5C800', tiktok: '#00C4BC',
+    google: '#EA4335', x: '#5B7083', nomu: '#16A34A', other: '#8a8fa8'
+  };
+  function pColor(k) { return PLATFORM_COLOR[k] || PLATFORM_COLOR.other; }
   var KIND_AR = {
     campaign_new: 'حملة جديدة', campaign_edit: 'تعديل حملة', video: 'مونتاج مقطع',
     design: 'تصميم', content: 'محتوى', report: 'تقرير أداء',
@@ -223,11 +229,14 @@
     var platHTML = platKeys.length ? '<div class="bars">' + platKeys.map(function (k) {
       var p = byPlat[k];
       return '<div class="bar-row">' +
-        '<div class="bar-top"><span class="bar-label">' + (PLATFORM_AR[k] || k) + '</span>' +
+        '<div class="bar-top"><span class="bar-label">' +
+          '<i class="dot" style="background:' + pColor(k) + '"></i>' + (PLATFORM_AR[k] || k) + '</span>' +
         '<span class="bar-value num">' + F.money(p.spend) + ' ر.س</span></div>' +
         '<div class="bar-track"><div class="bar-fill" style="width:' +
-          Math.max((p.spend / (maxPlat || 1)) * 100, 2) + '%;background:var(--brand)"></div></div>' +
-        '<span class="hint">' + F.int(p.donations) + ' تبرع · عائد ' + F.money(p.revenue) + ' ر.س</span>' +
+          Math.max((p.spend / (maxPlat || 1)) * 100, 2) + '%;background:' + pColor(k) + '"></div></div>' +
+        (p.donations > 0 || p.revenue > 0
+          ? '<span class="hint">' + F.int(p.donations) + ' تبرع · قيمة ' + F.money(p.revenue) + ' ر.س</span>'
+          : '') +
       '</div>';
     }).join('') + '</div>' : window.Charts.empty('لا يوجد إنفاق في هذه الفترة');
 
@@ -272,11 +281,12 @@
         '<td class="num">' + F.money(d.revenue) + '</td>' +
         '<td class="num" style="font-weight:800;color:' +
           (d.roas >= 1 ? 'var(--green)' : 'var(--red)') + '">' + d.roas.toFixed(2) + 'x</td>' +
-        '<td>' + d.plats.map(function (p) {
-          return '<span class="tag" style="background:var(--bg);color:var(--muted);margin-inline-end:4px">' +
-            (PLATFORM_AR[p.platform] || p.platform) + ' ' +
-            '<b class="num" style="color:var(--text)">' + F.money(p.spend) + '</b></span>';
-        }).join('') + '</td>' +
+        '<td><span class="plat-chips">' + d.plats.filter(function (p) { return p.spend > 0; })
+          .map(function (p) {
+            return '<span class="plat-chip" title="' + F.esc(PLATFORM_AR[p.platform] || p.platform) +
+              '"><i style="background:' + pColor(p.platform) + '"></i>' +
+              '<b class="num">' + F.money(p.spend) + '</b></span>';
+          }).join('') + '</span></td>' +
       '</tr>';
     }).join('');
 
@@ -293,9 +303,9 @@
 
       '<div class="grid grid-4 mb">' +
         kpi('الإنفاق', F.money(spend) + ' ر.س', 'إجمالي الصرف على حملاتكم', 'money') +
-        kpi('العائد', F.money(revenue) + ' ر.س', 'إجمالي التبرعات المحصّلة', 'cart') +
         kpi('عدد التبرعات', F.int(donations), 'عملية تبرع خلال الفترة', 'pct') +
-        kpi('ROAS', roas.toFixed(2) + 'x', 'العائد ÷ الإنفاق', 'trend') +
+        kpi('قيمة التبرعات', F.money(revenue) + ' ر.س', 'إجمالي المبالغ المحصّلة', 'cart') +
+        kpi('ROAS', roas.toFixed(2) + 'x', 'قيمة التبرعات ÷ الإنفاق', 'trend') +
       '</div>' +
 
       '<div class="grid grid-2 mb">' +
@@ -315,12 +325,13 @@
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
         '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>' +
         'سير العمل</h3>' +
-        '<span class="hint">' + evs.length + ' حدث في الفترة</span></div>' +
-        '<div class="panel-body">' + timeline + '</div></div>' +
+        '<span class="hint">' + evs.length + ' منجز في الفترة</span></div>' +
+        '<div class="panel-body tl-scroll">' + timeline + '</div></div>' +
 
-      '<div class="panel"><div class="panel-head"><h3>تفصيل الأداء اليومي</h3></div>' +
+      '<div class="panel"><div class="panel-head"><h3>تفصيل الأداء اليومي</h3>' +
+        '<span class="hint">مرّر على لون المنصة لمعرفة اسمها</span></div>' +
         '<div class="table-wrap"><table><thead><tr>' +
-          '<th>التاريخ</th><th>الإنفاق</th><th>عدد التبرعات</th><th>العائد</th>' +
+          '<th>التاريخ</th><th>الإنفاق</th><th>عدد التبرعات</th><th>قيمة التبرعات</th>' +
           '<th>ROAS</th><th>الإنفاق حسب المنصة</th>' +
         '</tr></thead><tbody>' +
         (days.length ? tbl : '<tr><td colspan="6">' +
