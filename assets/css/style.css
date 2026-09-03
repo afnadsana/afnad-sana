@@ -292,8 +292,16 @@ svg{width:18px;height:18px;flex:none}
 .plat-chip i{width:8px;height:8px;border-radius:50%;flex:none}
 .plat-chip b{font-weight:700;color:var(--text)}
 
-/* منع عمود المنصات من ابتلاع عرض الجدول */
-table td:last-child .plat-chips{max-width:340px}
+/* جدول الأداء اليومي: أعمدة ثابتة العرض حتى تتطابق العناوين مع القيم دائماً.
+   بالتخطيط التلقائي كان عمود المنصات يبتلع العرض فتنفصل العناوين عن أعمدتها. */
+.tbl-daily{table-layout:fixed;width:100%}
+.tbl-daily th,.tbl-daily td{white-space:normal;overflow:hidden}
+.tbl-daily th:nth-child(1),.tbl-daily td:nth-child(1){width:104px}
+.tbl-daily th:nth-child(2),.tbl-daily td:nth-child(2){width:96px}
+.tbl-daily th:nth-child(3),.tbl-daily td:nth-child(3){width:92px}
+.tbl-daily th:nth-child(4),.tbl-daily td:nth-child(4){width:112px}
+.tbl-daily th:nth-child(5),.tbl-daily td:nth-child(5){width:76px}
+.tbl-daily th:nth-child(6),.tbl-daily td:nth-child(6){width:auto}
 
 /* سير العمل — قابل للتمرير حتى لا تطول الصفحة */
 .tl-scroll{max-height:400px;overflow-y:auto}

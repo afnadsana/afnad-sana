@@ -330,7 +330,7 @@
 
       '<div class="panel"><div class="panel-head"><h3>تفصيل الأداء اليومي</h3>' +
         '<span class="hint">مرّر على لون المنصة لمعرفة اسمها</span></div>' +
-        '<div class="table-wrap"><table><thead><tr>' +
+        '<div class="table-wrap"><table class="tbl-daily"><thead><tr>' +
           '<th>التاريخ</th><th>الإنفاق</th><th>عدد التبرعات</th><th>قيمة التبرعات</th>' +
           '<th>ROAS</th><th>الإنفاق حسب المنصة</th>' +
         '</tr></thead><tbody>' +
