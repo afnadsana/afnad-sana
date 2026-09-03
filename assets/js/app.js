@@ -1353,6 +1353,10 @@
         '<td><div class="t-actions">' +
           '<button class="btn btn-sm btn-primary" data-pay="' + c.id + '">' +
             (d ? 'تحديث السداد' : 'تسجيل المستحق') + '</button>' +
+          '<button class="btn btn-sm" data-report="' + c.id + '">تقارير الأداء</button>' +
+          '<button class="btn btn-sm" data-portal="' + c.id + '"' +
+            (S.portalUsersOf(c.id).length ? ' title="يوجد حساب دخول"' : '') + '>البوابة' +
+            (S.portalUsersOf(c.id).length ? ' ✓' : '') + '</button>' +
           '<button class="btn btn-sm" data-client-detail="' + c.id + '">كل الشهور</button>' +
         '</div></td></tr>';
     }).join('');
@@ -1575,6 +1579,183 @@
            '</tbody></table>' +
            arrearsHTML() +
            '</div></div>';
+  }
+
+  /* ---------- تقرير الأداء اليومي لجهة ---------- */
+  function reportForm(clientId) {
+    var c = S.db.clients.find(function (x) { return x.id === clientId; });
+    if (!c) return;
+    var list = S.reportsOf(clientId);
+    var canEdit = S.canWrite();
+
+    var rows = list.slice(0, 30).map(function (r) {
+      var net = r.revenue - r.spend;
+      return '<tr>' +
+        '<td class="num">' + F.arDate(r.date) + '</td>' +
+        '<td class="num">' + F.money(r.spend) + '</td>' +
+        '<td class="num">' + F.money(r.revenue) + '</td>' +
+        '<td class="num" style="font-weight:700;color:' +
+          (net < 0 ? 'var(--red)' : 'var(--green)') + '">' + F.money(net) + '</td>' +
+        '<td class="num">' + F.int(r.reach) + '</td>' +
+        '<td class="num">' + F.int(r.leads) + '</td>' +
+        '<td>' + F.esc((r.achievements || '—').slice(0, 60)) + '</td>' +
+        '<td>' + (canEdit ? '<div class="t-actions">' +
+          '<button class="btn btn-sm" data-rep-edit="' + r.id + '">تعديل</button>' +
+          '<button class="btn btn-sm btn-danger" data-rep-del="' + r.id + '">حذف</button>' +
+        '</div>' : '—') + '</td></tr>';
+    }).join('');
+
+    var body =
+      (canEdit ?
+      '<div class="form-grid mb" style="padding:14px;border:1px dashed var(--line);border-radius:12px">' +
+        '<div class="field full"><label>تسجيل تقرير يوم</label>' +
+          '<span class="hint">ما تراه الجهة في بوابتها</span></div>' +
+        '<div class="field"><label>التاريخ</label>' + dateField('rp_date', S.todayISO()) + '</div>' +
+        field('كم أنفقنا (ر.س)', '<input type="number" id="rp_spend" min="0" step="0.01" value="" placeholder="0.00">') +
+        field('العائد (ر.س)', '<input type="number" id="rp_rev" min="0" step="0.01" value="" placeholder="0.00">') +
+        field('الوصول', '<input type="number" id="rp_reach" min="0" step="1" value="" placeholder="0">') +
+        field('التفاعلات', '<input type="number" id="rp_leads" min="0" step="1" value="" placeholder="0">') +
+        '<div class="field full"><label>المنجزات</label>' +
+          '<textarea id="rp_ach" rows="2" placeholder="مثال: إطلاق حملة رمضان، تصميم 10 مقاطع، 3 تقارير أداء"></textarea></div>' +
+        '<div class="field full"><label>ملاحظة داخلية (لا تظهر للجهة)</label>' +
+          '<input id="rp_note" value="" placeholder="اختياري"></div>' +
+        '<div class="field full"><button class="btn btn-primary" id="rpSave" type="button">حفظ التقرير</button>' +
+          '<button class="btn" id="rpReset" type="button" style="margin-inline-start:8px">تفريغ</button></div>' +
+      '</div>' : '') +
+      '<div class="table-wrap"><table><thead><tr>' +
+        '<th>التاريخ</th><th>أنفقنا</th><th>العائد</th><th>الصافي</th>' +
+        '<th>الوصول</th><th>التفاعلات</th><th>المنجزات</th><th></th>' +
+      '</tr></thead><tbody>' +
+      (list.length ? rows : '<tr><td colspan="8">' + C.empty('لا توجد تقارير بعد') + '</td></tr>') +
+      '</tbody></table></div>';
+
+    openModal('تقارير الأداء: ' + c.name, body,
+      '<button class="btn" data-close>إغلاق</button>', null);
+
+    if (!canEdit) return;
+
+    function fill(r) {
+      $('#rp_date').value = toDisplayDate(r ? r.date : S.todayISO());
+      $('#rp_spend').value = r ? r.spend : '';
+      $('#rp_rev').value = r ? r.revenue : '';
+      $('#rp_reach').value = r ? r.reach : '';
+      $('#rp_leads').value = r ? r.leads : '';
+      $('#rp_ach').value = r ? r.achievements : '';
+      $('#rp_note').value = r ? r.note : '';
+    }
+
+    $('#rpSave').onclick = function () {
+      var d = fromDisplayDate($('#rp_date').value);
+      if (!d) { toast('اكتب التاريخ بصيغة يوم/شهر/سنة', true); return; }
+      run(function () {
+        return S.saveReport({
+          clientId: c.id, date: d,
+          spend: $('#rp_spend').value, revenue: $('#rp_rev').value,
+          reach: $('#rp_reach').value, leads: $('#rp_leads').value,
+          achievements: $('#rp_ach').value, note: $('#rp_note').value
+        });
+      }, 'تم حفظ التقرير').then(function () { reportForm(c.id); });
+    };
+    $('#rpReset').onclick = function () { fill(null); };
+
+    $('#modalBody').onclick = function (ev) {
+      var dp = ev.target.closest('[data-dp]');
+      if (dp) {
+        var nat = $('#' + dp.dataset.dp + '_n');
+        if (nat.showPicker) { try { nat.showPicker(); } catch (e) {} } else { nat.focus(); }
+        return;
+      }
+      var ed = ev.target.closest('[data-rep-edit]');
+      if (ed) {
+        var r = list.find(function (x) { return x.id === ed.dataset.repEdit; });
+        if (r) { fill(r); $('#rp_date').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        return;
+      }
+      var dl = ev.target.closest('[data-rep-del]');
+      if (dl) {
+        confirmBox('حذف تقرير هذا اليوم؟', function () {
+          run(function () { return S.deleteReport(dl.dataset.repDel); }, 'تم الحذف')
+            .then(function () { reportForm(c.id); });
+        });
+      }
+    };
+  }
+
+  /* ---------- حسابات بوابة الجهة ---------- */
+  function portalForm(clientId) {
+    var c = S.db.clients.find(function (x) { return x.id === clientId; });
+    if (!c) return;
+    var accounts = S.portalUsersOf(clientId);
+    var canEdit = S.canWrite();
+    var portalUrl = location.origin + location.pathname.replace(/[^/]*$/, '') + 'portal.html';
+
+    var rows = accounts.map(function (a) {
+      return '<tr>' +
+        '<td dir="ltr" style="font-weight:600">' + F.esc(a.email) + '</td>' +
+        '<td class="num">' + F.arDate((a.createdAt || '').slice(0, 10)) + '</td>' +
+        '<td>' + (canEdit
+          ? '<button class="btn btn-sm btn-danger" data-pu-del="' + a.id + '">إلغاء الوصول</button>'
+          : '—') + '</td></tr>';
+    }).join('');
+
+    var body =
+      '<div class="recon mb" style="padding:14px;background:var(--bg);border-radius:12px">' +
+        '<div><span class="k">رابط البوابة</span>' +
+          '<span class="v num" style="font-size:12.5px" dir="ltr">' + F.esc(portalUrl) + '</span></div>' +
+      '</div>' +
+      '<p class="hint" style="margin-bottom:14px">' +
+        'الجهة تدخل من هذا الرابط ببريدها وكلمة مرورها، وترى تقارير أدائها ومستحقاتها فقط — ' +
+        'لا ترى الفواتير ولا بيانات أي جهة أخرى، ولا تستطيع التعديل.</p>' +
+      (canEdit ?
+      '<div class="form-grid mb" style="padding:14px;border:1px dashed var(--line);border-radius:12px">' +
+        '<div class="field full"><label>إنشاء حساب دخول للجهة</label></div>' +
+        field('البريد الإلكتروني', '<input type="email" id="pu_email" dir="ltr" placeholder="name@jamiya.org">') +
+        '<div class="field"><label>كلمة المرور</label>' +
+          '<input type="text" id="pu_pass" dir="ltr" placeholder="٦ أحرف على الأقل">' +
+          '<span class="hint"><a href="#" id="pu_gen">توليد كلمة مرور قوية</a></span></div>' +
+        '<div class="field full"><button class="btn btn-primary" id="puSave" type="button">إنشاء الحساب</button></div>' +
+      '</div>' : '') +
+      '<div class="table-wrap"><table><thead><tr>' +
+        '<th>البريد</th><th>أُنشئ في</th><th></th>' +
+      '</tr></thead><tbody>' +
+      (accounts.length ? rows : '<tr><td colspan="3">' +
+        C.empty('لا يوجد حساب دخول لهذه الجهة بعد') + '</td></tr>') +
+      '</tbody></table></div>';
+
+    openModal('بوابة الجهة: ' + c.name, body,
+      '<button class="btn" data-close>إغلاق</button>', null);
+
+    if (!canEdit) return;
+
+    $('#pu_gen').onclick = function (e) {
+      e.preventDefault();
+      var abc = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      var out = '';
+      var arr = new Uint32Array(12);
+      crypto.getRandomValues(arr);
+      for (var i = 0; i < 12; i++) out += abc[arr[i] % abc.length];
+      $('#pu_pass').value = out;
+      $('#pu_pass').select();
+    };
+
+    $('#puSave').onclick = function () {
+      var email = $('#pu_email').value.trim();
+      var pass = $('#pu_pass').value;
+      if (!email) { toast('البريد مطلوب', true); return; }
+      if (!pass || pass.length < 6) { toast('كلمة المرور ٦ أحرف على الأقل', true); return; }
+      run(function () { return S.createPortalAccount(c.id, email, pass); }, 'تم إنشاء الحساب')
+        .then(function () { portalForm(c.id); });
+    };
+
+    $('#modalBody').onclick = function (ev) {
+      var d = ev.target.closest('[data-pu-del]');
+      if (d) {
+        confirmBox('إلغاء وصول هذا الحساب إلى بوابة الجهة؟', function () {
+          run(function () { return S.removePortalAccount(d.dataset.puDel); }, 'تم الإلغاء')
+            .then(function () { portalForm(c.id); });
+        });
+      }
+    };
   }
 
   /* نافذة سريعة: كم المستحق؟ وهل تم السداد؟ — لجهة وشهر محددين */
@@ -2379,6 +2560,10 @@
     }
     var pay = t.closest('[data-pay]');
     if (pay) { payDueForm(pay.dataset.pay, state.clientMonth || S.currentPeriod()); return; }
+    var rep = t.closest('[data-report]');
+    if (rep) { reportForm(rep.dataset.report); return; }
+    var prt = t.closest('[data-portal]');
+    if (prt) { portalForm(prt.dataset.portal); return; }
 
     var ced = t.closest('[data-edit-client]');
     if (ced && !t.closest('#modalFoot')) {

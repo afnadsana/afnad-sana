@@ -43,7 +43,7 @@
     return {
       user: '', orgName: '', role: 'member',
       entities: [], channels: [], entries: [], invoices: [],
-      clients: [], clientDues: [],
+      clients: [], clientDues: [], clientReports: [], clientUsers: [],
       members: [],
       settings: { openingBalance: 0, bankName: '', vatRegistrationDate: null, defaultVatRate: 0.15 },
       log: []
@@ -75,6 +75,14 @@
       feePercent: num(r.fee_percent),
       feeDeductPercent: num(r.fee_deduct_percent),
       feeMarkupPercent: num(r.fee_markup_percent)
+    };
+  }
+  function mapReport(r) {
+    return {
+      id: r.id, clientId: r.client_id, date: r.report_date,
+      spend: num(r.spend), revenue: num(r.revenue),
+      reach: num(r.reach), leads: num(r.leads),
+      achievements: r.achievements || '', note: r.note || ''
     };
   }
   function mapDue(r) {
@@ -165,7 +173,9 @@
       c.from('audit_log').select('*').eq('org_id', orgId).order('created_at', { ascending: false }).limit(300),
       c.from('memberships').select('user_id, role').eq('org_id', orgId),
       c.from('clients').select('*').eq('org_id', orgId).order('name'),
-      c.from('client_dues').select('*').eq('org_id', orgId).order('period', { ascending: false })
+      c.from('client_dues').select('*').eq('org_id', orgId).order('period', { ascending: false }),
+      c.from('client_reports').select('*').eq('org_id', orgId).order('report_date', { ascending: false }),
+      c.from('client_users').select('*').eq('org_id', orgId)
     ]);
 
     for (var i = 0; i < q.length; i++) {
@@ -193,6 +203,11 @@
     });
     out.clients    = q[8].data.map(mapClient);
     out.clientDues = q[9].data.map(mapDue);
+    out.clientReports = q[10].data.map(mapReport);
+    out.clientUsers   = q[11].data.map(function (r) {
+      return { id: r.id, clientId: r.client_id, userId: r.user_id,
+               email: r.email || '', createdAt: r.created_at };
+    });
 
     db = out;
     return db;
@@ -552,6 +567,98 @@
     base = Math.round(base * 100) / 100;
     var vat = Math.round(base * rate * 100) / 100;
     return { base: base, vat: vat, total: Math.round((base + vat) * 100) / 100 };
+  }
+
+  /* ---------- تقارير أداء الجهات ---------- */
+  async function saveReport(rep) {
+    requireWrite();
+    var row = {
+      org_id: orgId, client_id: rep.clientId, report_date: rep.date,
+      spend: num(rep.spend), revenue: num(rep.revenue),
+      reach: Math.round(num(rep.reach)), leads: Math.round(num(rep.leads)),
+      achievements: (rep.achievements || '').trim(), note: (rep.note || '').trim(),
+      created_by: me.id
+    };
+    var r = await client().from('client_reports')
+              .upsert(row, { onConflict: 'client_id,report_date' }).select().single();
+    if (r.error) throw new Error(r.error.message);
+    var rec = mapReport(r.data);
+    var i = db.clientReports.findIndex(function (x) {
+      return x.clientId === rec.clientId && x.date === rec.date;
+    });
+    if (i >= 0) db.clientReports[i] = rec; else db.clientReports.unshift(rec);
+    var c = db.clients.find(function (x) { return x.id === rec.clientId; });
+    await log('تعديل', 'تقرير أداء ' + (c ? c.name : '') + ' ليوم ' + rec.date);
+    return rec;
+  }
+
+  async function deleteReport(id) {
+    requireWrite();
+    var r = await client().from('client_reports').delete().eq('id', id);
+    if (r.error) throw new Error(r.error.message);
+    db.clientReports = db.clientReports.filter(function (x) { return x.id !== id; });
+    return true;
+  }
+
+  function reportsOf(clientId) {
+    return db.clientReports.filter(function (x) { return x.clientId === clientId; })
+             .sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+  }
+
+  /* ---------- حسابات بوابة الجهات ---------- */
+  function portalUsersOf(clientId) {
+    return db.clientUsers.filter(function (x) { return x.clientId === clientId; });
+  }
+
+  /**
+   * ينشئ حساب دخول لجهة ويربطه بها.
+   * يستخدم عميل Supabase ثانياً بلا حفظ جلسة، حتى لا يُستبدل
+   * تسجيل دخول المالك الحالي عند إنشاء المستخدم الجديد.
+   */
+  async function createPortalAccount(clientId, email, password) {
+    requireWrite();
+    email = (email || '').trim().toLowerCase();
+    if (!email) throw new Error('البريد مطلوب');
+    if (!password || password.length < 6) throw new Error('كلمة المرور ٦ أحرف على الأقل');
+
+    var tmp = global.supabase.createClient(global.SUPA_CONFIG.url, global.SUPA_CONFIG.anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false,
+              detectSessionInUrl: false, storageKey: 'afnad-portal-tmp' }
+    });
+
+    var r = await tmp.auth.signUp({ email: email, password: password });
+    if (r.error) throw new Error(authMsg(r.error));
+
+    var u = r.data && r.data.user;
+    if (!u) throw new Error('تعذّر إنشاء الحساب');
+    // Supabase يرجّع مستخدماً بلا هويات إذا كان البريد مسجّلاً من قبل
+    if (u.identities && u.identities.length === 0) {
+      throw new Error('هذا البريد مسجّل مسبقاً — استخدم بريداً آخر');
+    }
+
+    var ins = await client().from('client_users').insert({
+      org_id: orgId, client_id: clientId, user_id: u.id,
+      email: email, created_by: me.id
+    }).select().single();
+    if (ins.error) throw new Error(ins.error.message);
+
+    db.clientUsers.push({ id: ins.data.id, clientId: ins.data.client_id,
+                          userId: ins.data.user_id, email: ins.data.email,
+                          createdAt: ins.data.created_at });
+
+    var c = db.clients.find(function (x) { return x.id === clientId; });
+    await log('إضافة', 'حساب بوابة لجهة ' + (c ? c.name : '') + ' — ' + email);
+    return { ok: true, needsConfirm: !r.data.session };
+  }
+
+  /** يفصل حساب الدخول عن الجهة (لا يحذف المستخدم من نظام المصادقة) */
+  async function removePortalAccount(id) {
+    requireWrite();
+    var r = await client().from('client_users').delete().eq('id', id);
+    if (r.error) throw new Error(r.error.message);
+    db.clientUsers = db.clientUsers.filter(function (x) { return x.id !== id; });
+    await log('حذف', 'إلغاء ربط حساب بوابة');
+    return true;
   }
 
   /** آخر يوم في شهر الفترة (period = YYYY-MM-01) */
@@ -952,6 +1059,9 @@
     saveDue: saveDue, deleteDue: deleteDue, generateDuesForPeriod: generateDuesForPeriod,
     clientDuesOf: clientDuesOf, clientSummary: clientSummary,
     clientEffectiveStatus: clientEffectiveStatus, currentPeriod: currentPeriod,
+    saveReport: saveReport, deleteReport: deleteReport, reportsOf: reportsOf,
+    portalUsersOf: portalUsersOf, createPortalAccount: createPortalAccount,
+    removePortalAccount: removePortalAccount,
     computeFee: computeFee, clientActiveInPeriod: clientActiveInPeriod,
     dueOf: dueOf, dueState: dueState, periodEnd: periodEnd, periodOf: periodOf,
 
