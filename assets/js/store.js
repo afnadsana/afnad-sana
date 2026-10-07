@@ -75,7 +75,8 @@
       feeType: r.fee_type || 'fixed',
       feePercent: num(r.fee_percent),
       feeDeductPercent: num(r.fee_deduct_percent),
-      feeMarkupPercent: num(r.fee_markup_percent)
+      feeMarkupPercent: num(r.fee_markup_percent),
+      logoUrl: r.logo_url || null
     };
   }
   /* المنصات الإعلانية المدعومة — المفتاح يُخزَّن، والاسم للعرض */
@@ -91,6 +92,7 @@
       id: r.id, clientId: r.client_id, date: r.report_date,
       platform: r.platform || 'meta',
       spend: spend, revenue: revenue, donations: num(r.donations),
+      impressions: num(r.impressions),
       roas: spend > 0 ? Math.round((revenue / spend) * 100) / 100 : 0,
       source: r.source || 'manual', note: r.note || ''
     };
@@ -98,8 +100,19 @@
   function mapEvent(r) {
     return {
       id: r.id, clientId: r.client_id, date: r.event_date,
-      kind: r.kind || 'general', title: r.title, note: r.note || ''
+      kind: r.kind || 'general', title: r.title, note: r.note || '',
+      qty: Math.max(1, Math.round(num(r.qty)) || 1)
     };
+  }
+  /* لقطة عدد المتابعين: تُؤخذ وقت الفحص لا يومياً، لكل منصة */
+  var FOLLOWER_PLATFORMS = ['x', 'instagram', 'snapchat', 'tiktok', 'youtube', 'facebook', 'whatsapp', 'other'];
+  var FOLLOWER_PLATFORM_AR = {
+    x: 'إكس', instagram: 'إنستغرام', snapchat: 'سناب شات', tiktok: 'تيك توك',
+    youtube: 'يوتيوب', facebook: 'فيسبوك', whatsapp: 'واتساب (قناة/مجموعة)', other: 'أخرى'
+  };
+  function mapFollowers(r) {
+    return { id: r.id, clientId: r.client_id, date: r.snap_date, platform: r.platform || 'x',
+             followers: num(r.followers), note: r.note || '' };
   }
   function mapDue(r) {
     return {
@@ -198,6 +211,10 @@
     for (var i = 0; i < q.length; i++) {
       if (q[i].error) throw new Error(q[i].error.message);
     }
+
+    // لقطات المتابعين — تُحمَّل على حدة: الجدول يُضاف بهجرة v2، ولا نُسقط النظام إن لم يُشغَّل بعد
+    var fq = await c.from('client_followers').select('*').eq('org_id', orgId).order('snap_date', { ascending: false });
+    out.clientFollowers = fq.error ? [] : fq.data.map(mapFollowers);
 
     out.orgName  = q[0].data ? q[0].data.name : '';
     out.entities = q[1].data.map(function (r) { return { id: r.id, name: r.name }; });
@@ -485,6 +502,7 @@
     if (patch.feeDeductPercent !== undefined) row.fee_deduct_percent = num(patch.feeDeductPercent);
     if (patch.feeMarkupPercent !== undefined) row.fee_markup_percent = num(patch.feeMarkupPercent);
     if (patch.portalCode       !== undefined) row.portal_code        = patch.portalCode || null;
+    if (patch.logoUrl          !== undefined) row.logo_url           = patch.logoUrl || null;
 
     var r = await client().from('clients').update(row).eq('id', id).select().single();
     if (r.error) throw new Error(r.error.message);
@@ -596,6 +614,7 @@
       platform: rep.platform || 'meta',
       spend: num(rep.spend), revenue: num(rep.revenue),
       donations: Math.round(num(rep.donations)),
+      impressions: Math.round(num(rep.impressions)),
       source: rep.source || 'manual', note: (rep.note || '').trim(),
       created_by: me.id
     };
@@ -649,13 +668,59 @@
              .sort(function (a, b) { return a.date < b.date ? 1 : -1; });
   }
 
+  /* ---------- لقطات المتابعين ---------- */
+  async function saveFollowers(f) {
+    requireWrite();
+    var row = {
+      org_id: orgId, client_id: f.clientId, snap_date: f.date,
+      platform: f.platform || 'x', followers: Math.round(num(f.followers)),
+      note: (f.note || '').trim(), created_by: me.id
+    };
+    var r = await client().from('client_followers')
+              .upsert(row, { onConflict: 'client_id,snap_date,platform' }).select().single();
+    if (r.error) throw new Error(r.error.message);
+    var rec = mapFollowers(r.data);
+    db.clientFollowers = db.clientFollowers || [];
+    var i = db.clientFollowers.findIndex(function (x) {
+      return x.clientId === rec.clientId && x.date === rec.date && x.platform === rec.platform;
+    });
+    if (i >= 0) db.clientFollowers[i] = rec; else db.clientFollowers.unshift(rec);
+    return rec;
+  }
+  async function deleteFollowers(id) {
+    requireWrite();
+    var r = await client().from('client_followers').delete().eq('id', id);
+    if (r.error) throw new Error(r.error.message);
+    db.clientFollowers = (db.clientFollowers || []).filter(function (x) { return x.id !== id; });
+  }
+  function followersOf(clientId) {
+    return (db.clientFollowers || []).filter(function (x) { return x.clientId === clientId; })
+             .sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+  }
+
+  /* ---------- شعار الجهة (لتقرير التصدير) ---------- */
+  async function uploadClientLogo(clientId, file) {
+    requireWrite();
+    if (!file) throw new Error('اختر ملف الشعار');
+    if (file.size > 2 * 1024 * 1024) throw new Error('حجم الشعار يجب أن يكون أقل من 2MB');
+    var ext = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+    var path = orgId + '/' + clientId + '.' + ext;
+    var up = await client().storage.from('client-logos').upload(path, file, { upsert: true, contentType: file.type || 'image/png' });
+    if (up.error) throw new Error(up.error.message);
+    var pub = client().storage.from('client-logos').getPublicUrl(path);
+    var url = pub.data.publicUrl + '?v=' + Date.now();   // كسر الكاش عند الاستبدال
+    await updateClient(clientId, { logoUrl: url });
+    return url;
+  }
+
   /* ---------- سير أحداث الحملة ---------- */
   async function saveEvent(ev) {
     requireWrite();
     var row = {
       org_id: orgId, client_id: ev.clientId, event_date: ev.date,
       kind: ev.kind || 'general', title: (ev.title || '').trim(),
-      note: (ev.note || '').trim(), created_by: me.id
+      note: (ev.note || '').trim(), created_by: me.id,
+      qty: Math.max(1, Math.round(num(ev.qty)) || 1)
     };
     if (!row.title) throw new Error('عنوان الحدث مطلوب');
     var q = ev.id
@@ -1137,6 +1202,9 @@
     clientEffectiveStatus: clientEffectiveStatus, currentPeriod: currentPeriod,
     saveReport: saveReport, deleteReport: deleteReport, reportsOf: reportsOf,
     saveEvent: saveEvent, deleteEvent: deleteEvent, eventsOf: eventsOf,
+    saveFollowers: saveFollowers, deleteFollowers: deleteFollowers, followersOf: followersOf,
+    FOLLOWER_PLATFORMS: FOLLOWER_PLATFORMS, FOLLOWER_PLATFORM_AR: FOLLOWER_PLATFORM_AR,
+    uploadClientLogo: uploadClientLogo,
     reportsByDay: reportsByDay, PLATFORMS: PLATFORMS, PLATFORM_AR: PLATFORM_AR,
     portalUsersOf: portalUsersOf, createPortalAccount: createPortalAccount,
     removePortalAccount: removePortalAccount,

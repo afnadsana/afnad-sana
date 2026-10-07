@@ -1790,6 +1790,7 @@
           F.esc(S.PLATFORM_AR[r.platform] || r.platform) + '</span>' +
           (r.source === 'auto' ? '<span class="hint" style="display:block">تلقائي</span>' : '') + '</td>' +
         '<td class="num">' + F.money(r.spend) + '</td>' +
+        '<td class="num">' + (r.impressions ? F.int(r.impressions) : '<span style="color:var(--muted)">—</span>') + '</td>' +
         '<td class="num" style="font-weight:700">' + F.int(r.donations) + '</td>' +
         '<td class="num">' + F.money(r.revenue) + '</td>' +
         '<td class="num" style="font-weight:800;color:' +
@@ -1800,11 +1801,20 @@
         '</div>' : '—') + '</td></tr>';
     }).join('');
 
+    var fols = S.followersOf(clientId);
+    var folRows = fols.slice(0, 40).map(function (f) {
+      return '<tr>' +
+        '<td class="num">' + F.arDate(f.date) + '</td>' +
+        '<td>' + F.esc(S.FOLLOWER_PLATFORM_AR[f.platform] || f.platform) + '</td>' +
+        '<td class="num" style="font-weight:700">' + F.int(f.followers) + '</td>' +
+        '<td>' + (canEdit ? '<button class="btn btn-sm btn-danger" data-fl-del="' + f.id + '">حذف</button>' : '—') + '</td></tr>';
+    }).join('');
+
     var evs = S.eventsOf(clientId);
     var evRows = evs.slice(0, 40).map(function (e) {
       return '<tr>' +
         '<td class="num">' + F.arDate(e.date) + '</td>' +
-        '<td>' + F.esc(EVENT_KIND[e.kind] || 'حدث') + '</td>' +
+        '<td>' + F.esc(EVENT_KIND[e.kind] || 'حدث') + (e.qty > 1 ? ' <b class="num">×' + e.qty + '</b>' : '') + '</td>' +
         '<td style="font-weight:600">' + F.esc(e.title) + '</td>' +
         '<td>' + F.esc(e.note || '—') + '</td>' +
         '<td>' + (canEdit ? '<div class="t-actions">' +
@@ -1825,6 +1835,7 @@
             return '<option value="' + p + '">' + F.esc(S.PLATFORM_AR[p]) + '</option>';
           }).join('') + '</select></div>' +
         field('الإنفاق (ر.س)', '<input type="number" id="rp_spend" min="0" step="0.01" value="" placeholder="0.00">') +
+        field('مرات الظهور', '<input type="number" id="rp_impr" min="0" step="1" value="" placeholder="0">') +
         field('عدد التبرعات', '<input type="number" id="rp_don" min="0" step="1" value="" placeholder="0">') +
         field('العائد (ر.س)', '<input type="number" id="rp_rev" min="0" step="0.01" value="" placeholder="0.00">') +
         '<div class="field"><label>ROAS</label>' +
@@ -1836,13 +1847,30 @@
           '<button class="btn" id="rpReset" type="button" style="margin-inline-start:8px">تفريغ</button></div>' +
       '</div>' : '') +
       '<div class="table-wrap mb"><table><thead><tr>' +
-        '<th>التاريخ</th><th>المنصة</th><th>الإنفاق</th><th>التبرعات</th>' +
+        '<th>التاريخ</th><th>المنصة</th><th>الإنفاق</th><th>الظهور</th><th>التبرعات</th>' +
         '<th>العائد</th><th>ROAS</th><th></th>' +
       '</tr></thead><tbody>' +
-      (list.length ? rows : '<tr><td colspan="7">' + C.empty('لا توجد تقارير بعد') + '</td></tr>') +
+      (list.length ? rows : '<tr><td colspan="8">' + C.empty('لا توجد تقارير بعد') + '</td></tr>') +
       '</tbody></table></div>' +
 
-      '<h3 style="font-size:15px;font-weight:700;margin:18px 0 10px">سير العمل</h3>' +
+      '<h3 style="font-size:15px;font-weight:700;margin:18px 0 10px">المتابعون <span class="hint" style="font-weight:400">لقطة وقت الفحص لكل منصة، لا تُسجَّل يومياً. "قبل وبعد" في التقرير = أول وآخر لقطة في الفترة</span></h3>' +
+      (canEdit ?
+      '<div class="form-grid mb" style="padding:14px;border:1px dashed var(--line);border-radius:12px">' +
+        '<div class="field"><label>تاريخ اللقطة</label>' + dateField('fl_date', S.todayISO()) + '</div>' +
+        '<div class="field"><label>المنصة</label><select id="fl_plat">' +
+          S.FOLLOWER_PLATFORMS.map(function (p) {
+            return '<option value="' + p + '">' + F.esc(S.FOLLOWER_PLATFORM_AR[p]) + '</option>';
+          }).join('') + '</select></div>' +
+        field('عدد المتابعين', '<input type="number" id="fl_count" min="0" step="1" value="" placeholder="0">') +
+        '<div class="field full"><button class="btn btn-primary" id="flSave" type="button">حفظ اللقطة</button></div>' +
+      '</div>' : '') +
+      '<div class="table-wrap mb"><table><thead><tr>' +
+        '<th>التاريخ</th><th>المنصة</th><th>المتابعون</th><th></th>' +
+      '</tr></thead><tbody>' +
+      (fols.length ? folRows : '<tr><td colspan="4">' + C.empty('لا لقطات متابعين بعد') + '</td></tr>') +
+      '</tbody></table></div>' +
+
+      '<h3 style="font-size:15px;font-weight:700;margin:18px 0 10px">سير العمل <span class="hint" style="font-weight:400">عدد المحتويات في التقرير يُحسب من هنا: التصاميم، المقاطع، المحتوى</span></h3>' +
       (canEdit ?
       '<div class="form-grid mb" style="padding:14px;border:1px dashed var(--line);border-radius:12px">' +
         '<div class="field"><label>تاريخ الحدث</label>' + dateField('ev_date', S.todayISO()) + '</div>' +
@@ -1850,6 +1878,7 @@
           Object.keys(EVENT_KIND).map(function (k) {
             return '<option value="' + k + '">' + EVENT_KIND[k] + '</option>';
           }).join('') + '</select></div>' +
+        field('العدد', '<input type="number" id="ev_qty" min="1" step="1" value="1"><span class="hint">مثال: 10 تصاميم في حدث واحد</span>') +
         '<div class="field full"><label>ماذا أنجزنا؟</label>' +
           '<input id="ev_title" placeholder="مثال: تم إنشاء حملة جديدة لجمع التبرعات، تم مونتاج مقطع تعريفي"></div>' +
         '<div class="field full"><label>تفصيل (يظهر للجهة)</label>' +
@@ -1863,15 +1892,30 @@
       (evs.length ? evRows : '<tr><td colspan="5">' + C.empty('لا توجد أحداث بعد') + '</td></tr>') +
       '</tbody></table></div>';
 
+    var reportUrl = location.pathname.replace(/[^/]*$/, '') + 'report.html?client=' + encodeURIComponent(c.id);
+    var logoCtl = canEdit
+      ? '<label class="btn btn-sm" style="cursor:pointer">' + (c.logoUrl ? 'تغيير الشعار' : 'رفع شعار الجهة') +
+          '<input type="file" id="cl_logo" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden></label>'
+      : '';
     openModal('تقارير الأداء: ' + c.name, body,
+      '<a class="btn btn-primary" href="' + reportUrl + '" target="_blank" rel="noopener">تصدير التقرير</a>' +
+      logoCtl +
       '<button class="btn" data-close>إغلاق</button>', null);
 
     if (!canEdit) return;
+
+    $('#cl_logo').onchange = function () {
+      var f = this.files && this.files[0];
+      if (!f) return;
+      run(function () { return S.uploadClientLogo(c.id, f); }, 'تم حفظ شعار الجهة')
+        .then(function () { reportForm(c.id); });
+    };
 
     function fill(r) {
       $('#rp_date').value = toDisplayDate(r ? r.date : S.todayISO());
       $('#rp_plat').value = r ? r.platform : 'meta';
       $('#rp_spend').value = r ? r.spend : '';
+      $('#rp_impr').value = r && r.impressions ? r.impressions : '';
       $('#rp_don').value = r ? r.donations : '';
       $('#rp_rev').value = r ? r.revenue : '';
       $('#rp_note').value = r ? r.note : '';
@@ -1893,15 +1937,26 @@
         return S.saveReport({
           clientId: c.id, date: d, platform: $('#rp_plat').value,
           spend: $('#rp_spend').value, revenue: $('#rp_rev').value,
-          donations: $('#rp_don').value, note: $('#rp_note').value, source: 'manual'
+          donations: $('#rp_don').value, impressions: $('#rp_impr').value,
+          note: $('#rp_note').value, source: 'manual'
         });
       }, 'تم حفظ التقرير').then(function () { reportForm(c.id); });
     };
     $('#rpReset').onclick = function () { fill(null); };
 
+    $('#flSave').onclick = function () {
+      var d = fromDisplayDate($('#fl_date').value);
+      if (!d) { toast('اكتب تاريخ اللقطة بصيغة يوم/شهر/سنة', true); return; }
+      if ($('#fl_count').value === '') { toast('أدخل عدد المتابعين', true); return; }
+      run(function () {
+        return S.saveFollowers({ clientId: c.id, date: d, platform: $('#fl_plat').value, followers: $('#fl_count').value });
+      }, 'تم حفظ لقطة المتابعين').then(function () { reportForm(c.id); });
+    };
+
     function evFill(e) {
       $('#ev_date').value = toDisplayDate(e ? e.date : S.todayISO());
       $('#ev_kind').value = e ? e.kind : 'campaign_new';
+      $('#ev_qty').value = e ? e.qty : 1;
       $('#ev_title').value = e ? e.title : '';
       $('#ev_note').value = e ? e.note : '';
       editingEvent = e ? e.id : null;
@@ -1914,6 +1969,7 @@
       run(function () {
         return S.saveEvent({
           id: editingEvent, clientId: c.id, date: d, kind: $('#ev_kind').value,
+          qty: $('#ev_qty').value,
           title: $('#ev_title').value, note: $('#ev_note').value
         });
       }, 'تم حفظ الحدث').then(function () { reportForm(c.id); });
@@ -1925,6 +1981,14 @@
       if (dp) {
         var nat = $('#' + dp.dataset.dp + '_n');
         if (nat.showPicker) { try { nat.showPicker(); } catch (e) {} } else { nat.focus(); }
+        return;
+      }
+      var fdl = ev.target.closest('[data-fl-del]');
+      if (fdl) {
+        confirmBox('حذف هذه اللقطة؟', function () {
+          run(function () { return S.deleteFollowers(fdl.dataset.flDel); }, 'تم الحذف')
+            .then(function () { reportForm(c.id); });
+        });
         return;
       }
       var ed = ev.target.closest('[data-rep-edit]');

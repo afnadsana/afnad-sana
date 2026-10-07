@@ -1,0 +1,133 @@
+/* ============================================================
+   report.css — تقرير الأداء الإعلاني القابل للتصدير
+   مطابق للصيغة المعتمدة (شريحة 1280×720): ترويسة كحلية + خط فيروزي
+   + بطاقتان، ويُصدَّر PNG عبر html2canvas أو PDF عبر الطباعة.
+   ============================================================ */
+:root{
+  --navy:#27327A; --navy-2:#1E2660; --navy-ink:#1B2447;
+  --teal:#1FA7A1; --teal-2:#0E8F8A; --blue:#1877F2;
+  --ink:#1c1f33; --muted:#6b7080; --line:#e4e6f1;
+  --bg:#f3f4f9; --card:#fff; --red:#c62828;
+  --w:1280px; --h:720px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+/* display:grid/flex على العناصر يتغلب على السمة hidden — نُلزم الإخفاء */
+[hidden]{display:none!important}
+html,body{background:var(--bg);font-family:"Tajawal","Segoe UI",Tahoma,sans-serif;color:var(--ink)}
+.num{font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate;display:inline-block}
+
+/* ---------- شريط الأدوات ---------- */
+.rp-toolbar{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:10px 18px;background:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.rp-tb-left{display:flex;gap:12px;align-items:baseline}
+.rp-tb-left strong{font-size:16px}
+.rp-tb-left span{color:var(--muted);font-size:13px}
+.rp-tb-right{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rp-tb-right label{font-size:13px;color:var(--muted);display:flex;gap:6px;align-items:center}
+.rp-tb-right .dp-text{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:8px;direction:ltr;width:118px;text-align:center;font-variant-numeric:tabular-nums}
+.sep{width:1px;height:24px;background:var(--line);margin:0 4px}
+.btn{font:inherit;font-weight:700;font-size:13.5px;padding:8px 14px;border-radius:9px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--ink)}
+.btn:hover{background:var(--bg)}
+.btn-primary{background:var(--navy);color:#fff;border-color:var(--navy)}
+.btn-primary:hover{background:var(--navy-2)}
+.btn[disabled]{opacity:.5;cursor:default}
+
+.rp-boot{display:grid;place-items:center;gap:12px;padding:80px 0;color:var(--muted)}
+.spin{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--navy);animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.rp-error{margin:40px auto;max-width:560px;padding:18px 22px;background:#fdecef;color:var(--red);border-radius:12px;text-align:center;font-weight:700}
+
+/* ---------- الصفحات ---------- */
+.rp-pages{display:flex;flex-direction:column;gap:28px;align-items:center;padding:28px 12px 60px}
+.rp-page{width:var(--w);height:var(--h);background:#fff;position:relative;overflow:hidden;
+  box-shadow:0 10px 40px -14px rgba(27,36,71,.35);border-radius:6px;display:flex;flex-direction:column}
+@media (max-width:1320px){.rp-pages{transform-origin:top center;transform:scale(calc(100vw / 1320))}}
+
+.rp-head{height:156px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:24px 40px;flex:none}
+.rp-rule{height:5px;background:var(--teal);flex:none}
+.rp-logo-box{width:197px;height:108px;background:#fff;border-radius:14px;display:grid;place-items:center;padding:12px;flex:none}
+.rp-logo-box img{max-width:174px;max-height:84px;object-fit:contain}
+.rp-logo-text{font-weight:800;font-size:16px;color:var(--navy);text-align:center;line-height:1.3;padding:0 6px}
+.rp-title{text-align:center;flex:1;padding:0 16px}
+.rp-title h1{font-size:34px;font-weight:800;line-height:1.2}
+.rp-title p{font-size:17px;opacity:.9;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rp-pill{display:inline-block;margin-top:8px;background:rgba(255,255,255,.14);border-radius:999px;padding:5px 26px;font-weight:700;font-size:15px}
+
+.rp-body{display:grid;grid-template-columns:1fr 1fr;gap:27px;padding:22px 43px 0;flex:1;min-height:0}
+.rp-card{background:#fff;border:1.5px solid var(--line);border-radius:18px;padding:20px 30px;display:flex;flex-direction:column;gap:12px;min-height:0}
+.rp-card h2{font-size:20px;font-weight:800;display:flex;align-items:center;gap:10px}
+.rp-card h2 .dot{width:14px;height:14px;border-radius:50%;background:var(--blue);flex:none}
+
+.rp-plat-list{display:flex;flex-direction:column;flex:1;justify-content:space-around}
+.rp-plat{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:19px;font-weight:700}
+.rp-plat:last-child{border-bottom:none}
+.rp-plat .bar{width:9px;height:25px;border-radius:5px;flex:none}
+.rp-plat .name{flex:1}
+.rp-plat .usd{color:var(--muted);font-weight:500;font-size:14px;margin-inline-end:8px}
+.rp-plat .amt{font-weight:800;min-width:150px;text-align:left}
+.rp-total{background:var(--navy-ink);color:#fff;border-radius:14px;padding:18px 28px;display:flex;justify-content:space-between;align-items:center;font-size:22px;font-weight:800}
+.rp-total b{font-size:30px}
+
+.rp-hero{background:linear-gradient(90deg,#15a69b,#1b8c87 60%,#1f7f7c);color:#fff;border-radius:14px;padding:18px 28px;display:flex;flex-direction:column;gap:2px}
+.rp-hero span{font-size:19px;font-weight:700}
+.rp-hero b{font-size:44px;font-weight:800;line-height:1.1}
+.rp-two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.rp-box{border-radius:14px;padding:14px 18px;color:#fff;display:flex;flex-direction:column;gap:2px}
+.rp-box span{font-size:16px;font-weight:700;opacity:.95}
+.rp-box b{font-size:30px;font-weight:800}
+.rp-box-blue{background:var(--blue)}
+.rp-box-navy{background:var(--navy-ink)}
+.rp-roas{background:#eef6fb;border-radius:14px;padding:14px 24px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:14px;margin-top:auto}
+.rp-roas > div > span{font-size:17px;font-weight:700;display:block}
+.rp-roas small{display:block;color:var(--muted);font-size:12px}
+.rp-roas > b{font-size:34px;font-weight:800;color:var(--blue)}
+.rp-net{text-align:left}
+.rp-net b{font-size:22px;font-weight:800;color:#0a7d58;display:block}
+
+/* المعايير الأساسية */
+.rp-base{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding:14px 43px 0;flex:none}
+.rp-base-item{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 18px;display:flex;flex-direction:column;gap:2px;border-inline-start:6px solid var(--teal)}
+.rp-base-item span{font-size:14px;font-weight:700;color:var(--muted)}
+.rp-base-item b{font-size:26px;font-weight:800;line-height:1.15}
+.rp-base-item b .arrow{font-size:18px;color:var(--teal);margin:0 6px}
+.rp-base-item small{font-size:12px;color:var(--muted)}
+.rp-base-item small.up{color:#0a7d58}
+.rp-base-item small.down{color:var(--red)}
+
+.rp-foot{margin-top:auto;padding:10px 43px 14px;display:flex;justify-content:space-between;font-size:12px;color:var(--red);flex:none}
+.rp-foot .num{color:var(--muted)}
+
+/* ---------- الصفحة 2: الوصول حسب المنصة ---------- */
+.rp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px 22px;padding:20px 43px 0;flex:1;align-content:start}
+.rp-block{border-radius:14px;border:1.5px solid var(--line);overflow:hidden;position:relative;background:#fff}
+.rp-block .bh{display:flex;align-items:center;gap:10px;padding:9px 14px;color:#fff;font-weight:800;font-size:16px}
+.rp-block .bh .ic{width:22px;height:22px;border-radius:6px;background:rgba(255,255,255,.22);display:grid;place-items:center;font-size:12px}
+.rp-block .bh .ic svg{width:14px;height:14px;fill:#fff}
+.rp-row{display:flex;justify-content:space-between;align-items:center;padding:7px 14px;font-size:14px;font-weight:700;border-bottom:1px dashed var(--line)}
+.rp-row:last-of-type{border-bottom:none}
+.rp-row .num{font-size:16px;font-weight:800}
+.rp-row.tot{background:var(--bg);font-size:15px}
+.rp-row.tot .num{font-size:19px}
+.rp-row.tot b{font-weight:800}
+.rp-block.empty{opacity:.45}
+
+.rp-prod{padding:14px 43px 0;flex:none}
+.rp-prod h2{font-size:18px;font-weight:800;margin-bottom:8px;color:#1f8a5f}
+.rp-prod table{width:100%;border-collapse:separate;border-spacing:0 4px;font-size:14.5px}
+.rp-prod th{background:#1fa7a1;color:#fff;padding:7px 12px;text-align:right;font-weight:700}
+.rp-prod th:first-child{border-radius:0 8px 8px 0}
+.rp-prod th:last-child{border-radius:8px 0 0 8px;text-align:center}
+.rp-prod td{background:#e9f7f3;padding:7px 12px;font-weight:700}
+.rp-prod td:first-child{border-radius:0 8px 8px 0;color:#1f8a5f;width:40px}
+.rp-prod td:last-child{border-radius:8px 0 0 8px;text-align:center;font-size:16px;font-weight:800}
+.rp-prod tr:nth-child(even) td{background:#f4fbf8}
+
+/* ---------- الطباعة ---------- */
+@media print{
+  @page{size:1280px 720px;margin:0}
+  html,body{background:#fff}
+  .rp-toolbar,.rp-boot,.rp-error{display:none!important}
+  .rp-pages{padding:0;gap:0;transform:none}
+  .rp-page{box-shadow:none;border-radius:0;page-break-after:always;break-after:page}
+  .rp-page:last-child{page-break-after:auto;break-after:auto}
+}

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تقرير الأداء الإعلاني — أفناد سنا</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="assets/css/report.css?v=20261007a">
+</head>
+<body>
+
+<!-- شريط الأدوات: لا يدخل في التصدير -->
+<header class="rp-toolbar" id="toolbar">
+  <div class="rp-tb-left">
+    <strong id="tbName">—</strong>
+    <span id="tbRange" class="num">—</span>
+  </div>
+  <div class="rp-tb-right">
+    <!-- كروم يرسم input[type=date] بلغة الواجهة متجاهلاً lang — لذلك حقل نصي بأرقام لاتينية (نفس حل البوابة) -->
+    <label>من <input type="text" id="tbFrom" dir="ltr" inputmode="numeric" placeholder="dd/mm/yyyy" maxlength="10" class="dp-text"></label>
+    <label>إلى <input type="text" id="tbTo" dir="ltr" inputmode="numeric" placeholder="dd/mm/yyyy" maxlength="10" class="dp-text"></label>
+    <button class="btn" id="tbApply">تطبيق</button>
+    <span class="sep"></span>
+    <button class="btn btn-primary" id="tbPng">تصدير PNG</button>
+    <button class="btn" id="tbPdf">طباعة / PDF</button>
+  </div>
+</header>
+
+<div class="rp-boot" id="boot"><div class="spin"></div><p id="bootMsg">جارٍ تحميل البيانات…</p></div>
+
+<main class="rp-pages" id="pages" hidden>
+
+  <!-- ===== الصفحة 1: الصيغة المعتمدة (إنفاق حسب المنصة / العائد والأثر) + المعايير الأساسية ===== -->
+  <section class="rp-page" id="page1">
+    <div class="rp-head">
+      <div class="rp-logo-box"><img id="agencyLogo" src="assets/img/afnad-logo.png" alt="أفناد سنا"></div>
+      <div class="rp-title">
+        <h1>تقرير الأداء الإعلاني</h1>
+        <p id="subTitle">—</p>
+        <span class="rp-pill" id="periodPill">—</span>
+      </div>
+      <div class="rp-logo-box rp-logo-client"><img id="clientLogo" alt="" hidden><span id="clientLogoFallback" class="rp-logo-text"></span></div>
+    </div>
+    <div class="rp-rule"></div>
+
+    <div class="rp-body">
+      <div class="rp-card">
+        <h2><i class="dot"></i>الإنفاق الإعلاني حسب المنصة</h2>
+        <div class="rp-plat-list" id="platList"></div>
+        <div class="rp-total"><span>إجمالي الإنفاق</span><b class="num" id="totSpend">—</b></div>
+      </div>
+
+      <div class="rp-card">
+        <h2><i class="dot"></i>العائد والأثر من <span id="sourceName">منصة نمو</span></h2>
+        <div class="rp-hero"><span>إجمالي التبرعات</span><b class="num" id="totRev">—</b></div>
+        <div class="rp-two">
+          <div class="rp-box rp-box-blue"><span>عدد التبرعات</span><b class="num" id="totDon">—</b></div>
+          <div class="rp-box rp-box-navy"><span>عدد المتبرعين</span><b class="num" id="totDonors">—</b></div>
+        </div>
+        <div class="rp-roas">
+          <div><span>العائد على الإنفاق</span><small>العائد مقسومًا على الإنفاق</small></div>
+          <b class="num" id="roas">—</b>
+          <div class="rp-net"><b class="num" id="net">—</b><small>صافي الأثر بعد خصم الإنفاق</small></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- المعايير الأساسية الثلاثة -->
+    <div class="rp-base">
+      <div class="rp-base-item">
+        <span>مرات الظهور</span><b class="num" id="kImpr">—</b><small>عبر كل المنصات في الفترة</small>
+      </div>
+      <div class="rp-base-item">
+        <span>المتابعون قبل ← بعد</span>
+        <!-- داخل .num الاتجاه LTR، فالسهم → يقرأ "قبل ثم بعد" من اليسار لليمين -->
+        <b class="num"><span id="kFolBefore">—</span> <span class="arrow">→</span> <span id="kFolAfter">—</span></b>
+        <small id="kFolDelta">—</small>
+      </div>
+      <div class="rp-base-item">
+        <span>المحتويات المنفَّذة</span><b class="num" id="kContent">—</b><small id="kContentBreak">—</small>
+      </div>
+    </div>
+
+    <div class="rp-foot"><span id="footNote">سعر صرف الدولار 3.75 ريال، المصدر منصات الإعلان ومنصة نمو</span><span class="num">1 / 2</span></div>
+  </section>
+
+  <!-- ===== الصفحة 2: الوصول حسب المنصة + الإنتاج الفني ===== -->
+  <section class="rp-page" id="page2">
+    <div class="rp-head">
+      <div class="rp-logo-box"><img src="assets/img/afnad-logo.png" alt="أفناد سنا"></div>
+      <div class="rp-title">
+        <h1>الوصول والمحتوى</h1>
+        <p id="subTitle2">—</p>
+        <span class="rp-pill" id="periodPill2">—</span>
+      </div>
+      <div class="rp-logo-box rp-logo-client"><img id="clientLogo2" alt="" hidden><span id="clientLogoFallback2" class="rp-logo-text"></span></div>
+    </div>
+    <div class="rp-rule"></div>
+
+    <div class="rp-grid" id="reachGrid"></div>
+
+    <div class="rp-prod">
+      <h2>الإنتاج الفني</h2>
+      <table id="prodTable"><thead><tr><th>#</th><th>النوع</th><th>العدد</th></tr></thead><tbody></tbody></table>
+    </div>
+
+    <div class="rp-foot"><span>حقّقنا خلال الفترة <b class="num" id="reachTotal">—</b> ظهور في التواصل الاجتماعي</span><span class="num">2 / 2</span></div>
+  </section>
+
+</main>
+
+<div class="rp-error" id="err" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="assets/js/config.js?v=20261007a"></script>
+<script src="assets/js/report.js?v=20261007a"></script>
+</body>
+</html>

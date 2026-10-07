@@ -131,7 +131,8 @@
     state.reports = (rRes.data || []).map(function (x) {
       return {
         date: x.report_date, platform: x.platform || 'meta',
-        spend: num(x.spend), revenue: num(x.revenue), donations: num(x.donations)
+        spend: num(x.spend), revenue: num(x.revenue), donations: num(x.donations),
+        impressions: num(x.impressions)
       };
     });
 
@@ -139,8 +140,33 @@
                  .eq('client_id', c.id).order('event_date', { ascending: false });
     state.events = (eRes.data || []).map(function (x) {
       return { date: x.event_date, kind: x.kind || 'general',
-               title: x.title, note: x.note || '' };
+               title: x.title, note: x.note || '', qty: Math.max(1, num(x.qty) || 1) };
     });
+
+    // لقطات المتابعين (الجدول قد لا يكون موجوداً قبل تشغيل الهجرة — نتجاهل الخطأ)
+    var fRes = await db.from('client_followers').select('*')
+                 .eq('client_id', c.id).order('snap_date', { ascending: true });
+    state.followers = fRes.error ? [] : (fRes.data || []).map(function (x) {
+      return { date: x.snap_date, platform: x.platform || 'x', followers: num(x.followers) };
+    });
+  }
+
+  /* المعايير الأساسية للفترة: الظهور، المتابعون قبل/بعد، المحتويات المنفَّذة */
+  function baseMetrics(rows, evs, r) {
+    var impr = rows.reduce(function (a, x) { return a + (x.platform === 'nomu' ? 0 : x.impressions); }, 0);
+    var before = {}, after = {}, firstIn = {};
+    (state.followers || []).forEach(function (s) {
+      if (r.to && s.date > r.to) return;
+      if (r.from && s.date < r.from) before[s.platform] = s.followers;
+      else if (!(s.platform in firstIn)) firstIn[s.platform] = s.followers;
+      after[s.platform] = s.followers;
+    });
+    Object.keys(after).forEach(function (p) { if (!(p in before)) before[p] = (p in firstIn) ? firstIn[p] : after[p]; });
+    var sum = function (o) { return Object.keys(o).reduce(function (a, k) { return a + o[k]; }, 0); };
+    var content = evs.reduce(function (a, e) {
+      return a + (['design', 'video', 'content'].indexOf(e.kind) >= 0 ? e.qty : 0);
+    }, 0);
+    return { impr: impr, folB: sum(before), folA: sum(after), hasFol: Object.keys(after).length > 0, content: content };
   }
 
   var PLATFORM_AR = {
@@ -257,6 +283,8 @@
       : '<p class="hint" style="padding:6px 2px">لا توجد أحداث مسجّلة في هذه الفترة.</p>';
 
     var st = STATUS[c.contractStatus] || STATUS.active;
+    var bm = baseMetrics(rows, evs, r);
+    var exportUrl = 'report.html' + (r.from && r.to ? '?from=' + r.from + '&to=' + r.to : '');
 
     var presets = [['today', 'اليوم'], ['last7', 'آخر 7 أيام'], ['last30', 'آخر 30 يوم'],
                    ['thisMonth', 'هذا الشهر'], ['all', 'كل الفترات']];
@@ -295,9 +323,13 @@
         '<h2>تقرير الأداء</h2>' +
         '<p>ملخص ما نُفِّذ لحملاتكم — ' + (rows.length ? rows.length + ' يوم في الفترة المختارة' : 'لا توجد بيانات في الفترة المختارة') + '</p>' +
       '</div>' +
-      '<span class="tag" style="background:' + st[1] + ';color:' + st[2] + ';font-size:13px;padding:6px 14px">' +
-        'العقد: ' + st[0] + '</span>' +
-      '</div>' +
+      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+        '<a class="btn btn-primary" href="' + exportUrl + '" target="_blank" rel="noopener">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;margin-inline-end:6px;vertical-align:-3px">' +
+          '<path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>تصدير التقرير</a>' +
+        '<span class="tag" style="background:' + st[1] + ';color:' + st[2] + ';font-size:13px;padding:6px 14px">' +
+          'العقد: ' + st[0] + '</span>' +
+      '</div></div>' +
 
       '<div class="filterbar">' + chips + '</div>' +
 
@@ -306,6 +338,15 @@
         kpi('عدد التبرعات', F.int(donations), 'عملية تبرع خلال الفترة', 'pct') +
         kpi('قيمة التبرعات', F.money(revenue) + ' ر.س', 'إجمالي المبالغ المحصّلة', 'cart') +
         kpi('ROAS', roas.toFixed(2) + 'x', 'قيمة التبرعات ÷ الإنفاق', 'trend') +
+      '</div>' +
+
+      /* المعايير الأساسية الثلاثة */
+      '<div class="grid grid-3 mb">' +
+        kpi('مرات الظهور', F.int(bm.impr), 'عبر كل المنصات الإعلانية في الفترة', 'trend') +
+        kpi('المتابعون قبل ← بعد',
+            bm.hasFol ? F.int(bm.folB) + ' → ' + F.int(bm.folA) : '—',   /* .num اتجاهه LTR فالسهم → يقرأ قبل←بعد صحيحاً */
+            bm.hasFol ? ((bm.folA - bm.folB >= 0 ? '+' : '−') + F.int(Math.abs(bm.folA - bm.folB)) + ' متابع خلال الفترة') : 'لا لقطات متابعين بعد', 'pct') +
+        kpi('المحتويات المنفَّذة', F.int(bm.content), 'تصاميم ومقاطع ومحتوى من سير العمل', 'cart') +
       '</div>' +
 
       '<div class="grid grid-2 mb">' +
