@@ -1609,7 +1609,7 @@
 
     /* قائمة تحديد الفترة — تحكم أرقام الأداء المعروضة */
     var rr = orgRange();
-    var presets = [['today', 'اليوم'], ['yesterday', 'أمس'], ['last7', 'آخر 7 أيام'],
+    var presets = [['yesterday', 'أمس'], ['last7', 'آخر 7 أيام'],
                    ['last30', 'آخر 30 يوم'], ['thisMonth', 'هذا الشهر'],
                    ['prevMonth', 'الشهر السابق'], ['all', 'كل الفترات']];
     var rangeChips = presets.map(function (p) {
@@ -1719,18 +1719,19 @@
            '</tbody></table></div></div>';
   }
 
-  /* مدى فترة صفحة الجمعيات */
+  /* مدى فترة صفحة الجمعيات — الأرقام تُسحب دائماً لليوم السابق، فكل الفترات تنتهي بأمس
+     (لا خانة «اليوم»: يومها فارغ دائماً) */
   function orgRange() {
     var t = S.todayISO();
+    var yd = S.addDays(t, -1);
     var d = new Date(t + 'T00:00:00'), y = d.getFullYear(), m = d.getMonth();
     switch (state.orgRange) {
-      case 'today':     return { from: t, to: t };
-      case 'yesterday': return { from: S.addDays(t, -1), to: S.addDays(t, -1) };
-      case 'last7':     return { from: S.addDays(t, -6), to: t };
-      case 'thisMonth': return { from: t.slice(0, 8) + '01', to: t };
+      case 'yesterday': return { from: yd, to: yd };
+      case 'last7':     return { from: S.addDays(yd, -6), to: yd };
+      case 'thisMonth': return { from: yd.slice(0, 8) + '01', to: yd };
       case 'prevMonth': return { from: S.iso(new Date(y, m - 1, 1)), to: S.iso(new Date(y, m, 0)) };
       case 'all':       return { from: null, to: null };
-      default:          return { from: S.addDays(t, -29), to: t };
+      default:          return { from: S.addDays(yd, -29), to: yd };
     }
   }
 

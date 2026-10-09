@@ -55,16 +55,17 @@
   }
 
   /* ---------- المدى الزمني ---------- */
+  /* الأرقام تُسحب دائماً لليوم السابق، فكل الفترات تنتهي بأمس (لا خانة «اليوم») */
   function computeRange() {
-    var t = todayISO();
+    var yd = addDays(todayISO(), -1);
     switch (state.range) {
-      case 'today':     return { from: t, to: t };
-      case 'last7':     return { from: addDays(t, -6), to: t };
-      case 'last30':    return { from: addDays(t, -29), to: t };
-      case 'thisMonth': return { from: t.slice(0, 8) + '01', to: t };
+      case 'yesterday': return { from: yd, to: yd };
+      case 'last7':     return { from: addDays(yd, -6), to: yd };
+      case 'last30':    return { from: addDays(yd, -29), to: yd };
+      case 'thisMonth': return { from: yd.slice(0, 8) + '01', to: yd };
       case 'all':       return { from: null, to: null };
       case 'custom':    return { from: state.from, to: state.to };
-      default:          return { from: addDays(t, -29), to: t };
+      default:          return { from: addDays(yd, -29), to: yd };
     }
   }
 
@@ -286,7 +287,7 @@
     var bm = baseMetrics(rows, evs, r);
     var exportUrl = 'report.html' + (r.from && r.to ? '?from=' + r.from + '&to=' + r.to : '');
 
-    var presets = [['today', 'اليوم'], ['last7', 'آخر 7 أيام'], ['last30', 'آخر 30 يوم'],
+    var presets = [['yesterday', 'أمس'], ['last7', 'آخر 7 أيام'], ['last30', 'آخر 30 يوم'],
                    ['thisMonth', 'هذا الشهر'], ['all', 'كل الفترات']];
     var chips = presets.map(function (p) {
       return '<button class="chip' + (state.range === p[0] ? ' active' : '') +
